@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# VALLO | Consulta Acesso de Redes - Proxmox VE 8/9, Debian 13 LXC
+# AdGuard DNS Reports - instalador generico para Proxmox VE 8/9 e LXC Debian 13
 # Installer created from the user's existing DNS Reports project.
 # Instalar: bash <(curl -fsSL URL_RAW)   (prefer local review before executing)
-# Atualizar sem perder registros: bash <(curl -fsSL URL_RAW) --update 103
+# Atualizar sem perder registros: bash instalador.sh --update ID_DO_CONTAINER
 set -Eeuo pipefail
 umask 077
 export LC_ALL=C
@@ -17,12 +17,14 @@ trap 'errline "$LINENO"' ERR
 for cmd in pct pvesh pveam pvesm python3 openssl curl; do command -v "$cmd" >/dev/null || fail "Ausente no Proxmox: $cmd"; done
 printf '\n%b' "$CYAN"
 cat <<'HEADER'
-  __      ___    _     _     ___
-  \ \    / /_\  | |   | |   / _ \
-   \ \/\/ / _ \ | |__ | |__| (_) |
-    \_/\_/_/ \_\|____||____|\___/
+    _       _  ____                     _
+   / \   __| |/ ___|_   _  __ _ _ __ __| |
+  / _ \ / _` | |  _| | | |/ _` | '__/ _` |
+ / ___ \ (_| | |_| | |_| | (_| | | | (_| |
+/_/   \_\__,_|\____|\__,_|\__,_|_|  \__,_|
 
-         CONSULTA ACESSO DE REDES
+           DNS REPORTS
+  Consultas DNS | Relatorios | Usuarios
 HEADER
 printf '%b\n' "$RESET"
 printf '%b  Painel corporativo | HTTPS | DNS | CSV / Excel / PDF%b\n\n' "$BLUE" "$RESET"
@@ -30,17 +32,21 @@ MODE=install
 if [[ ${1:-} == --update || ${1:-} == --upgrade ]]; then
   MODE=update
   CTID="${2:-}"
-  [[ "$CTID" =~ ^[0-9]+$ ]] || fail 'Informe o CTID: bash instalador.sh --update 103'
+  [[ "$CTID" =~ ^[0-9]+$ ]] || fail 'Informe o CTID: bash instalador.sh --update ID_DO_CONTAINER'
 elif [[ ${1:-} == --help || ${1:-} == -h ]]; then
-  printf 'Instalar: bash instalador.sh\nAtualizar painel existente: bash instalador.sh --update 103\n'
+  printf 'Instalar: bash instalador.sh\nAtualizar painel existente: bash instalador.sh --update ID_DO_CONTAINER\n'
   exit 0
 elif [[ $# -gt 0 ]]; then
   fail 'Argumento desconhecido. Use --help.'
 fi
-STORAGE=local-lvm
-TEMPLATE_STORAGE=local
-BRIDGE=vmbr0
-ADGUARD_URL=http://172.20.0.253
+# Padroes do Proxmox; outras infraestruturas podem sobrescrever com variaveis de ambiente.
+STORAGE="${REPORTS_STORAGE:-local-lvm}"
+TEMPLATE_STORAGE="${REPORTS_TEMPLATE_STORAGE:-local}"
+BRIDGE="${REPORTS_BRIDGE:-vmbr0}"
+TZ_NAME="${REPORTS_TIMEZONE:-$(timedatectl show -p Timezone --value 2>/dev/null || true)}"
+[[ -n "$TZ_NAME" ]] || TZ_NAME=Etc/UTC
+[[ -f "/usr/share/zoneinfo/$TZ_NAME" ]] || fail "Fuso horario invalido: $TZ_NAME. Use REPORTS_TIMEZONE."
+ADGUARD_URL=''
 RETENTION=90
 APPDIR=/opt/dnsreports
 if [[ $MODE == install ]]; then
@@ -52,8 +58,12 @@ if [[ $MODE == install ]]; then
   pvesm status | awk 'NR>1{print $1}' | grep -Fx "$TEMPLATE_STORAGE" >/dev/null || fail "Storage de templates $TEMPLATE_STORAGE ausente."
   AVAIL=$(pvesm status | awk -v s="$STORAGE" '$1==s {print $6}')
   [[ "$AVAIL" =~ ^[0-9]+$ ]] && (( AVAIL > 10*1024*1024 )) || fail "Pouco espaco em $STORAGE; mantenha pelo menos 10 GiB livres."
-  printf '  📦 Container:   %s (automatico)\n  🐧 Sistema:     Debian 13 | LXC nao privilegiado\n  🌐 Rede:        DHCP na vmbr0\n  🧠 Recursos:    2 CPU / 1024 MB RAM / 8 GB disco\n  🗓️  Historico:    90 dias\n  🛡️  AdGuard:     %s\n\n' "$CTID" "$ADGUARD_URL"
-  printf '%b  Informe somente os quatro dados de acesso:%b\n' "$BLUE" "$RESET"
+  printf '  📦 Container:   %s (automatico)\n  🐧 Sistema:     Debian 13 | LXC nao privilegiado\n  🌐 Rede:        DHCP em %s\n  💾 Armazenamento: %s | Templates: %s\n  🧠 Recursos:    2 CPU / 1024 MB RAM / 8 GB disco\n  🗓️  Historico:    90 dias | Fuso: %s\n\n' "$CTID" "$BRIDGE" "$STORAGE" "$TEMPLATE_STORAGE" "$TZ_NAME"
+  printf '%b  Informe o endereco e os acessos do AdGuard e do painel:%b\n' "$BLUE" "$RESET"
+  read -r -p '  URL do AdGuard Home (ex.: http://IP:3000): ' ADGUARD_URL
+  ADGUARD_URL="${ADGUARD_URL%/}"
+  [[ "$ADGUARD_URL" =~ ^https?://[^[:space:]]+$ ]] || fail 'Informe uma URL http(s) valida do AdGuard Home.'
+  [[ "$ADGUARD_URL" != *'@'* ]] || fail 'Nao inclua credenciais na URL; forneca usuario/senha separadamente.'
   read -r -p '  Usuario AdGuard [admin]: ' ADGUARD_USER
   ADGUARD_USER="${ADGUARD_USER:-admin}"
   read -r -s -p '  Senha do AdGuard: ' ADGUARD_PASS; printf '\n'
@@ -70,7 +80,7 @@ else
   pct exec "$CTID" -- test -f '/etc/systemd/system/dnsreports.service' || fail 'Unidade dnsreports nao encontrada neste CT.'
   info "Atualizando o painel do CT $CTID sem recriar o container ou apagar o banco."
 fi
-TMP="$(mktemp -d /root/vallo-consulta.XXXXXXXX)"
+TMP="$(mktemp -d /root/adguard-reports-consulta.XXXXXXXX)"
 trap 'rm -rf "${TMP:-}"' EXIT
 if [[ $MODE == install ]]; then
   info 'Localizando o template Debian 13...'
@@ -82,7 +92,7 @@ if [[ $MODE == install ]]; then
     pveam download "$TEMPLATE_STORAGE" "$TEMPLATE"
   fi
   ok "Template: $TEMPLATE"
-  export ADGUARD_URL ADGUARD_USER ADGUARD_PASS PANEL_USER PANEL_PASS RETENTION
+  export ADGUARD_URL ADGUARD_USER ADGUARD_PASS PANEL_USER PANEL_PASS RETENTION TZ_NAME
   python3 - "$TMP/config.json" <<'PYCONF'
 import os,sys,json,secrets,hashlib
 salt=secrets.token_bytes(16); rounds=380000
@@ -95,6 +105,7 @@ settings={
  'panel_password_hash':f'pbkdf2_sha256${rounds}${salt.hex()}${h.hex()}',
  'session_secret':secrets.token_hex(48),
  'retention_days':90,
+ 'timezone':os.environ['TZ_NAME'],
  'initial_history_days':7,
 }
 with open(sys.argv[1],'w') as f: json.dump(settings,f,ensure_ascii=False)
@@ -105,10 +116,10 @@ PYCONF
   # 022 ONLY for pct create: unprivileged lxc-usernsexec needs to traverse its rootfs.
   umask 022
   pct create "$CTID" "${TEMPLATE_STORAGE}:vztmpl/${TEMPLATE}" \
-    --hostname vallo-consulta-redes --ostype debian --unprivileged 1 \
+    --hostname adguard-dns-reports --ostype debian --unprivileged 1 \
     --rootfs "${STORAGE}:8" --cores 2 --memory 1024 --swap 512 \
     --net0 "name=eth0,bridge=${BRIDGE},ip=dhcp" \
-    --nameserver 172.20.0.254 --timezone America/Sao_Paulo --onboot 1 --start 1
+    --timezone "$TZ_NAME" --onboot 1 --start 1
   umask 077
   ok 'LXC criado.'
   info 'Instalando nginx, Python e dependencias...'
@@ -118,17 +129,23 @@ PYCONF
   pct exec "$CTID" -- "$APPDIR/venv/bin/pip" install --no-cache-dir 'Flask>=3.1,<4' 'requests>=2.31,<3' 'openpyxl>=3.1,<4' 'reportlab>=4,<5' 'gunicorn>=23,<25'
 else
   info 'Criando backup da configuracao de acesso antiga...'
-  pct exec "$CTID" -- bash -c 'cp -a /opt/dnsreports/config.json /opt/dnsreports/config.json.pre-vallo-backup; python3 - <<"PYUP"
+  pct exec "$CTID" -- bash -c 'cp -a /opt/dnsreports/config.json /opt/dnsreports/config.json.pre-adguard-reports-backup; python3 - <<"PYUP"
 import json,os
 p="/opt/dnsreports/config.json"
 with open(p) as f: s=json.load(f)
 s["retention_days"]=90
+if not s.get("timezone"):
+    try:
+        from pathlib import Path
+        s["timezone"]=Path("/etc/timezone").read_text().strip() or "Etc/UTC"
+    except (OSError, ValueError):
+        s["timezone"]="Etc/UTC"
 with open(p,"w") as f: json.dump(s,f,ensure_ascii=False)
 os.chmod(p,0o640)
 PYUP'
 fi
-info 'Instalando VALLO, relatórios e permissões exclusivas do administrador...'
-cat >"$TMP/app.py" <<'VALLO_ASSET_APP_END'
+info 'Instalando AdGuard DNS Reports, relatórios e permissões exclusivas do administrador...'
+cat >"$TMP/app.py" <<'AdGuard DNS Reports_ASSET_APP_END'
 """Read-only, internal DNS reporting panel."""
 import csv
 import hashlib
@@ -162,7 +179,7 @@ app = Flask(__name__)
 app.secret_key = settings['session_secret']
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Lax', SESSION_COOKIE_SECURE=True,
                   PERMANENT_SESSION_LIFETIME=timedelta(hours=8), MAX_CONTENT_LENGTH=100000)
-ZONE = ZoneInfo('America/Sao_Paulo')
+ZONE = ZoneInfo(settings.get('timezone', 'Etc/UTC'))
 ATTEMPTS = {}
 USERNAME_RE = re.compile(r"^[A-Za-z0-9._-]{3,40}$")
 FIELDS = ['Data/Hora', 'Hostname', 'IP', 'Dominio', 'Servico provavel', 'Categoria', 'Tipo DNS', 'Resultado', 'Bloqueada', 'Motivo']
@@ -435,7 +452,7 @@ def export(format_name):
                         ' ORDER BY ts DESC LIMIT ?', [*values, limit]).fetchall()
     conn.close()
     stamp = datetime.now(ZONE).strftime('%Y%m%d-%H%M')
-    filename = f'vallo-consulta-acesso-redes-{stamp}.{format_name}'
+    filename = f'adguard-reports-consulta-acesso-redes-{stamp}.{format_name}'
     if format_name == 'csv':
         out = io.StringIO()
         writer = csv.writer(out, delimiter=';', lineterminator='\r\n')
@@ -458,7 +475,7 @@ def export(format_name):
     output = io.BytesIO()
     doc = SimpleDocTemplate(output, pagesize=landscape(A4), leftMargin=26, rightMargin=26, topMargin=28, bottomMargin=28)
     styles = getSampleStyleSheet()
-    story = [Paragraph('VALLO | Consulta Acesso de Redes — Consultas DNS', styles['Title']),
+    story = [Paragraph('AdGuard DNS Reports | Relatorios de Consultas DNS — Consultas DNS', styles['Title']),
              Paragraph('Documento gerado a partir das consultas DNS. Domínios e serviços prováveis não comprovam acesso efetivo.', styles['Normal']),
              Paragraph(f'Gerado em {escape(datetime.now(ZONE).strftime("%d/%m/%Y %H:%M"))} — {len(rows)} consultas (PDF limitado a 1.000 linhas)', styles['Normal']),
              Spacer(1, 14)]
@@ -483,8 +500,8 @@ def healthz():
     # Health check still requires login for all other URLs. nginx can check locally.
     return Response('ok', mimetype='text/plain')
 
-VALLO_ASSET_APP_END
-cat >"$TMP/core.py" <<'VALLO_ASSET_CORE_END'
+AdGuard DNS Reports_ASSET_APP_END
+cat >"$TMP/core.py" <<'AdGuard DNS Reports_ASSET_CORE_END'
 """DNS Reports: read-only collector for AdGuard Home's querylog API."""
 import hashlib
 import ipaddress
@@ -751,18 +768,18 @@ def collect(max_pages=500):
 if __name__ == '__main__':
     collect()
 
-VALLO_ASSET_CORE_END
-cat >"$TMP/login.html" <<'VALLO_ASSET_LOGIN_END'
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Entrar · Consulta Acesso de Redes | VALLO</title><link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}"></head>
-<body class="login-body"><main class="login-card"><div class="brand"><div class="brand-mark">◈</div><div><strong>VALLO</strong><small>Consulta Acesso de Redes</small></div></div><h1>Acesso ao painel</h1><p class="muted">Entre com suas credenciais para consultar o histórico de sua rede.</p>
+AdGuard DNS Reports_ASSET_CORE_END
+cat >"$TMP/login.html" <<'AdGuard DNS Reports_ASSET_LOGIN_END'
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Entrar · Relatorios de Consultas DNS | AdGuard DNS Reports</title><link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}"></head>
+<body class="login-body"><main class="login-card"><div class="brand"><div class="brand-mark">◈</div><div><strong>AdGuard DNS Reports</strong><small>Relatorios de Consultas DNS</small></div></div><h1>Acesso ao painel</h1><p class="muted">Entre com suas credenciais para consultar o histórico de sua rede.</p>
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
-<form method="post"><input type="hidden" name="csrf" value="{{csrf}}"><label for="username">Usuário</label><input autofocus id="username" name="username" autocomplete="username" required><label for="password">Senha</label><input id="password" type="password" name="password" autocomplete="current-password" required><button class="btn primary full">Entrar</button></form><p class="login-foot">VALLO · Consulta de acessos de rede · ambiente interno</p></main></body></html>
+<form method="post"><input type="hidden" name="csrf" value="{{csrf}}"><label for="username">Usuário</label><input autofocus id="username" name="username" autocomplete="username" required><label for="password">Senha</label><input id="password" type="password" name="password" autocomplete="current-password" required><button class="btn primary full">Entrar</button></form><p class="login-foot">AdGuard DNS Reports · Consulta de acessos de rede · ambiente interno</p></main></body></html>
 
-VALLO_ASSET_LOGIN_END
-cat >"$TMP/dashboard.html" <<'VALLO_ASSET_DASH_END'
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Consulta Acesso de Redes · VALLO</title><link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}"></head><body>
-<div class="shell"><aside class="sidebar"><div class="brand"><div class="brand-mark">◈</div><div><strong>VALLO</strong><small>Consulta Acesso de Redes</small></div></div><div class="aside-section">PAINEL</div><a class="nav active" href="/">▦ <span>Visão geral</span></a><a class="nav" href="#consultas">⌕ <span>Consultas DNS</span></a>{% if g.is_admin %}<a class="nav" href="/usuarios">♙ <span>Usuários do painel</span></a>{% endif %}<a class="nav" href="#servicos">◫ <span>Serviços e domínios</span></a><div class="sidebar-bottom"><span class="status-dot"></span> Servidor interno <div class="aside-note">Relatórios de consultas DNS<br>Não equivale a histórico de navegação.</div></div></aside>
-<main class="main"><div class="topbar"><span>VALLO <span class="crumb">/ Consulta Acesso de Redes</span></span><span class="user-tag">{{username}}</span><form method="post" action="/logout"><input type="hidden" name="csrf" value="{{csrf}}"><button class="btn subtle" type="submit">Sair ↗</button></form></div><div class="content"><div class="pageheading"><div><div class="eyebrow">MONITORAMENTO DNS</div><h1>Consulta Acesso de Redes</h1><p class="muted">Consultas realizadas pelos dispositivos monitorados pelo AdGuard Home.</p></div><div class="updated"><div class="actions export-top"><a class="btn outline" href="{{ url_for('export',format_name='csv') }}?{{ request.query_string.decode() }}">↓ CSV</a><a class="btn primary" href="{{ url_for('export',format_name='xlsx') }}?{{ request.query_string.decode() }}">↓ Excel</a><a class="btn outline" href="{{ url_for('export',format_name='pdf') }}?{{ request.query_string.decode() }}">↓ PDF</a></div>Última coleta<br><strong>{{ dt(meta.get('last_success','')) if meta.get('last_success') else 'Aguardando primeira coleta' }}</strong></div></div>
+AdGuard DNS Reports_ASSET_LOGIN_END
+cat >"$TMP/dashboard.html" <<'AdGuard DNS Reports_ASSET_DASH_END'
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Relatorios de Consultas DNS · AdGuard DNS Reports</title><link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}"></head><body>
+<div class="shell"><aside class="sidebar"><div class="brand"><div class="brand-mark">◈</div><div><strong>AdGuard DNS Reports</strong><small>Relatorios de Consultas DNS</small></div></div><div class="aside-section">PAINEL</div><a class="nav active" href="/">▦ <span>Visão geral</span></a><a class="nav" href="#consultas">⌕ <span>Consultas DNS</span></a>{% if g.is_admin %}<a class="nav" href="/usuarios">♙ <span>Usuários do painel</span></a>{% endif %}<a class="nav" href="#servicos">◫ <span>Serviços e domínios</span></a><div class="sidebar-bottom"><span class="status-dot"></span> Servidor interno <div class="aside-note">Relatórios de consultas DNS<br>Não equivale a histórico de navegação.</div></div></aside>
+<main class="main"><div class="topbar"><span>AdGuard DNS Reports <span class="crumb">/ Relatorios de Consultas DNS</span></span><span class="user-tag">{{username}}</span><form method="post" action="/logout"><input type="hidden" name="csrf" value="{{csrf}}"><button class="btn subtle" type="submit">Sair ↗</button></form></div><div class="content"><div class="pageheading"><div><div class="eyebrow">MONITORAMENTO DNS</div><h1>Relatorios de Consultas DNS</h1><p class="muted">Consultas realizadas pelos dispositivos monitorados pelo AdGuard Home.</p></div><div class="updated"><div class="actions export-top"><a class="btn outline" href="{{ url_for('export',format_name='csv') }}?{{ request.query_string.decode() }}">↓ CSV</a><a class="btn primary" href="{{ url_for('export',format_name='xlsx') }}?{{ request.query_string.decode() }}">↓ Excel</a><a class="btn outline" href="{{ url_for('export',format_name='pdf') }}?{{ request.query_string.decode() }}">↓ PDF</a></div>Última coleta<br><strong>{{ dt(meta.get('last_success','')) if meta.get('last_success') else 'Aguardando primeira coleta' }}</strong></div></div>
 <form class="filters" method="get"><div class="filter-group"><label for="period">Período</label><select name="period" id="period"><option value="1" {% if period==1 %}selected{% endif %}>Últimas 24 horas</option><option value="7" {% if period==7 %}selected{% endif %}>Últimos 7 dias</option><option value="30" {% if period==30 %}selected{% endif %}>Últimos 30 dias</option><option value="90" {% if period==90 %}selected{% endif %}>Últimos 90 dias</option></select></div>
 <div class="filter-group"><label for="client">Computador</label><select name="client" id="client"><option value="">Todos os computadores</option>{% for c in choices %}<option value="{{c.ip}}" {% if args.get('client','')==c.ip %}selected{% endif %}>{{ c.name or c.ip }} {% if c.name and c.name != c.ip %}({{c.ip}}){% endif %}</option>{% endfor %}</select></div>
 <div class="filter-group"><label for="status">Resultado</label><select name="status" id="status"><option value="all">Todas</option><option value="allowed" {% if args.get('status')=='allowed' %}selected{% endif %}>Permitidas</option><option value="blocked" {% if args.get('status')=='blocked' %}selected{% endif %}>Bloqueadas</option></select></div>
@@ -773,28 +790,28 @@ cat >"$TMP/dashboard.html" <<'VALLO_ASSET_DASH_END'
 <section class="panel"><div class="panel-head"><div><h2>Computadores com mais consultas</h2><p>Por hostname ou endereço IP</p></div></div>{% for c in clients %}<div class="barrow"><div class="bar-top"><span title="{{c.ip}}">{{c.name}}</span><b>{{c.hits}}</b></div><progress class="meter alt" value="{{c.hits}}" max="{{max_clients}}"></progress></div>{% else %}<div class="empty">Nenhum computador encontrado.</div>{% endfor %}</section></div>
 <section class="panel top-domains"><div class="panel-head"><div><h2>Domínios mais consultados</h2><p>Ranking das solicitações DNS</p></div></div><div class="domains-grid">{% for domain in domains %}<div class="domain"><span class="ranking">{{loop.index}}</span><span class="domain-name">{{domain.name}}</span><strong>{{domain.hits}}</strong></div>{% else %}<div class="empty">Nenhum domínio registrado.</div>{% endfor %}</div></section>
 <section class="panel" id="consultas"><div class="panel-head wrap"><div><h2>Registro de consultas DNS</h2><p>Mostrando as 150 consultas mais recentes dos filtros. As exportações incluem até 100.000 linhas (PDF: 1.000).</p></div><div class="actions"><a class="btn outline" href="{{ url_for('export',format_name='csv') }}?{{ request.query_string.decode() }}">↓ CSV</a><a class="btn outline" href="{{ url_for('export',format_name='xlsx') }}?{{ request.query_string.decode() }}">↓ Excel</a><a class="btn outline" href="{{ url_for('export',format_name='pdf') }}?{{ request.query_string.decode() }}">↓ PDF</a></div></div><div class="table-scroll"><table><thead><tr><th>Data e hora</th><th>Computador</th><th>IP</th><th>Domínio consultado</th><th>Serviço provável</th><th>Resultado</th></tr></thead><tbody>{% for r in rows %}<tr><td class="nowrap">{{dt(r.ts)}}</td><td class="hostname" title="{{r.hostname}}">{{r.hostname if r.hostname and r.hostname!=r.ip else 'Não identificado'}}</td><td class="mono">{{r.ip}}</td><td class="domaintext">{{r.domain}}</td><td>{{r.service}}</td><td>{% if r.blocked %}<span class="pill blocked">Bloqueada</span>{% else %}<span class="pill allowed">Permitida</span>{% endif %}</td></tr>{% else %}<tr><td colspan="6" class="empty">Nenhum registro com estes filtros. Verifique se o coletor está ativo.</td></tr>{% endfor %}</tbody></table></div></section>
-<footer>VALLO · Consulta Acesso de Redes · Histórico de consultas DNS, não de navegação ou uso comprovado de aplicativos. Os nomes de serviços são estimativas. {% if meta.get('last_import_complete') == 'false' %}<br><strong>Aviso:</strong> uma coleta atingiu o limite de páginas; o histórico antigo pode estar incompleto.{% endif %}</footer>
+<footer>AdGuard DNS Reports · Relatorios de Consultas DNS · Histórico de consultas DNS, não de navegação ou uso comprovado de aplicativos. Os nomes de serviços são estimativas. {% if meta.get('last_import_complete') == 'false' %}<br><strong>Aviso:</strong> uma coleta atingiu o limite de páginas; o histórico antigo pode estar incompleto.{% endif %}</footer>
 </div></main></div>
 </body></html>
 
-VALLO_ASSET_DASH_END
-cat >"$TMP/users.html" <<'VALLO_ASSET_USERS_END'
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Usuários · Consulta Acesso de Redes | VALLO</title><link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}"></head><body>
-<div class="shell"><aside class="sidebar"><div class="brand"><div class="brand-mark">◈</div><div><strong>VALLO</strong><small>Consulta Acesso de Redes</small></div></div><div class="aside-section">PAINEL</div><a class="nav" href="/">▦ <span>Visão geral</span></a><a class="nav active" href="/usuarios">♙ <span>Usuários do painel</span></a><div class="sidebar-bottom"><span class="status-dot"></span> Servidor interno<div class="aside-note">Somente o administrador pode criar, excluir e redefinir senhas de usuários.</div></div></aside>
-<main class="main"><div class="topbar"><span>VALLO <span class="crumb">/ Usuários</span></span><form action="/logout" method="post"><input type="hidden" name="csrf" value="{{csrf}}"><button class="btn subtle">Sair ↗</button></form></div>
+AdGuard DNS Reports_ASSET_DASH_END
+cat >"$TMP/users.html" <<'AdGuard DNS Reports_ASSET_USERS_END'
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Usuários · Relatorios de Consultas DNS | AdGuard DNS Reports</title><link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}"></head><body>
+<div class="shell"><aside class="sidebar"><div class="brand"><div class="brand-mark">◈</div><div><strong>AdGuard DNS Reports</strong><small>Relatorios de Consultas DNS</small></div></div><div class="aside-section">PAINEL</div><a class="nav" href="/">▦ <span>Visão geral</span></a><a class="nav active" href="/usuarios">♙ <span>Usuários do painel</span></a><div class="sidebar-bottom"><span class="status-dot"></span> Servidor interno<div class="aside-note">Somente o administrador pode criar, excluir e redefinir senhas de usuários.</div></div></aside>
+<main class="main"><div class="topbar"><span>AdGuard DNS Reports <span class="crumb">/ Usuários</span></span><form action="/logout" method="post"><input type="hidden" name="csrf" value="{{csrf}}"><button class="btn subtle">Sair ↗</button></form></div>
 <div class="content"><div class="pageheading"><div><div class="eyebrow">CONFIGURAÇÕES DE ACESSO</div><h1>Usuários do painel</h1><p class="muted">Apenas o administrador gerencia usuários. As demais contas podem consultar e exportar relatórios.</p></div><a class="btn outline" href="/">← Voltar aos relatórios</a></div>
 {% if error %}<div class="error alert">{{error}}</div>{% endif %}{% if success %}<div class="success alert">{{success}}</div>{% endif %}
 <div class="two-col"><section class="panel"><div class="panel-head"><h2>Adicionar usuário</h2></div><form method="post" class="user-form"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="action" value="add"><label for="new-user">Usuário</label><input id="new-user" name="username" autocomplete="off" minlength="3" maxlength="40" pattern="[A-Za-z0-9._-]{3,40}" placeholder="Ex.: analista.rede" required><label for="new-pass">Senha (mínimo de 10 caracteres)</label><input id="new-pass" name="password" type="password" autocomplete="new-password" minlength="10" maxlength="256" required><button class="btn primary">Criar usuário</button></form></section>
 <section class="panel"><div class="panel-head"><h2>Usuários existentes</h2><p>Senha pode ser redefinida individualmente</p></div>
 {% for user in users %}<div class="user-row"><div class="user-name"><strong>{{user.username}}</strong>{% if user.is_admin %} <span class="pill allowed">Administrador</span>{% endif %}<small>Desde {{user.created_at}}</small></div><form method="post" class="inline-user-form"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="action" value="reset"><input type="hidden" name="user_id" value="{{user.id}}"><input name="password" type="password" autocomplete="new-password" minlength="10" maxlength="256" placeholder="Nova senha" required aria-label="Nova senha para {{user.username}}"><button class="btn outline" title="Alterar senha">Alterar senha</button></form>{% if not user.is_admin %}<form method="post"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="action" value="delete"><input type="hidden" name="user_id" value="{{user.id}}"><button class="btn danger">Excluir</button></form>{% endif %}</div>{% else %}<div class="empty">Nenhum usuário cadastrado.</div>{% endfor %}
-</section></div><footer>VALLO · Consulta Acesso de Redes | Acesso restrito à rede interna.</footer></div></main></div></body></html>
-VALLO_ASSET_USERS_END
-cat >"$TMP/style.css" <<'VALLO_ASSET_CSS_END'
+</section></div><footer>AdGuard DNS Reports · Relatorios de Consultas DNS | Acesso restrito à rede interna.</footer></div></main></div></body></html>
+AdGuard DNS Reports_ASSET_USERS_END
+cat >"$TMP/style.css" <<'AdGuard DNS Reports_ASSET_CSS_END'
 :root{font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#1b2840;background:#f4f7fb;font-synthesis:none}*{box-sizing:border-box}body{margin:0}a{color:inherit;text-decoration:none}button,input,select{font:inherit}button{cursor:pointer}.shell{display:flex;min-height:100vh}.sidebar{width:244px;flex-shrink:0;background:#11223b;color:#dce6f4;padding:26px 18px;display:flex;flex-direction:column;gap:8px}.brand{display:flex;align-items:center;gap:12px}.brand-mark{display:grid;place-items:center;background:#2874ed;color:white;width:42px;height:42px;border-radius:12px;font-size:29px}.brand strong{display:block;font-size:17px;letter-spacing:-.4px}.brand small{font-size:11px;opacity:.65;display:block;margin-top:4px}.aside-section{font-size:10px;font-weight:800;letter-spacing:1.7px;color:#728baa;margin:46px 10px 12px}.nav{padding:12px 13px;border-radius:8px;font-size:13px;display:flex;gap:12px;align-items:center;color:#a9bed7}.nav.active{background:#25446b;color:white;font-weight:650}.nav:hover{background:#213b60}.sidebar-bottom{margin-top:auto;font-size:12px;color:#c1d2e5;padding:15px 8px;border-top:1px solid #344661}.status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#56d6aa;margin-right:7px}.aside-note{color:#849bb7;line-height:1.6;font-size:11px;margin-top:10px}.main{min-width:0;flex:1}.topbar{display:flex;align-items:center;justify-content:space-between;padding:17px 35px;background:white;border-bottom:1px solid #e6ebf2;font-size:12px;font-weight:650}.crumb{color:#96a4b7;font-weight:400}.content{max-width:1560px;padding:34px 35px 50px;margin:auto}.pageheading{display:flex;justify-content:space-between;align-items:center;gap:20px;margin-bottom:25px}.eyebrow{font-size:10px;letter-spacing:1.6px;color:#3375d6;font-weight:800}h1{font-size:28px;letter-spacing:-.9px;margin:8px 0}h2{font-size:15px;letter-spacing:-.3px;margin:0}.muted{color:#7989a0;font-size:13px;line-height:1.7;margin:5px 0}.updated{text-align:right;font-size:11px;line-height:1.8;color:#8c9ab0}.updated strong{color:#344860;font-size:12px}.filters{border:1px solid #e2e8f1;background:white;border-radius:12px;padding:19px;display:flex;flex-wrap:wrap;gap:12px 14px;align-items:end;box-shadow:0 4px 15px rgba(30,56,89,.025)}.filter-group{flex:1 1 170px;min-width:155px}.filter-group.search{flex:1.5 1 200px}.filter-group label,.date-options label,.login-card label{font-size:11px;font-weight:750;display:block;margin-bottom:8px;color:#5a6d85}input,select{width:100%;height:39px;padding:0 11px;border-radius:7px;border:1px solid #dce4ee;background:#fff;color:#33445b;font-size:12px;outline:0}input:focus,select:focus{border-color:#3b82f6;box-shadow:0 0 0 3px #e7f0ff}.filter-actions{display:flex;gap:7px;align-items:center}.btn{height:38px;padding:0 16px;border:1px solid transparent;border-radius:7px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}.btn.primary{background:#2269da;color:white}.btn.primary:hover{background:#175bbd}.btn.subtle{color:#556781;background:#f2f5f9}.btn.outline{background:#fff;color:#336ab4;border-color:#d9e4f3}.btn.outline:hover{background:#edf5ff}.date-options{flex:1 1 100%;display:flex;gap:12px;border-top:1px dashed #e4eaf1;padding-top:12px}.date-options>div{max-width:195px;flex:1}.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:15px;margin:20px 0}.stat{padding:21px 22px;background:#fff;border:1px solid #e2e8f1;border-radius:12px}.stat-label{font-size:12px;font-weight:650;color:#74849a}.stat strong{display:block;font-size:31px;letter-spacing:-1.1px;margin:12px 0 7px}.stat small{font-size:11px;color:#9aa9ba}.two-col{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.panel{border:1px solid #e2e8f1;background:#fff;border-radius:12px;padding:23px;margin-bottom:18px;min-width:0}.panel-head{display:flex;justify-content:space-between;align-items:center;gap:15px;margin-bottom:22px}.panel-head p{font-size:12px;color:#8b9aae;margin:6px 0 0}.panel-head.wrap{flex-wrap:wrap}.barrow{margin:13px 0}.bar-top{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;color:#4b5e76;margin-bottom:8px}.bar-top span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.bar-top b{font-size:11px;color:#72839b}.track{background:#edf2f8;height:7px;border-radius:9px;overflow:hidden}.bar{background:#397bed;height:100%;border-radius:9px}.bar.alt{background:#21a59a}.domains-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3px 25px}.domain{display:flex;align-items:center;gap:13px;border-bottom:1px solid #eef2f7;padding:12px 0;font-size:12px;min-width:0}.ranking{font-size:11px;background:#eaf1fc;color:#4b79b7;border-radius:6px;display:grid;place-items:center;width:23px;height:23px;flex-shrink:0}.domain-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;color:#4a607a}.domain strong{color:#263f5a}.actions{display:flex;gap:7px;flex-wrap:wrap}.table-scroll{overflow:auto}table{border-collapse:collapse;width:100%;font-size:12px;min-width:890px}th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#8b9bb0;padding:13px 9px;border-bottom:1px solid #e5ecf3}td{padding:13px 9px;border-bottom:1px solid #f0f2f5;color:#586c83}tbody tr:hover{background:#f8fbfe}td.hostname{font-weight:700;color:#34506d}td.domaintext{color:#3168aa;word-break:break-word}.nowrap{white-space:nowrap}.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.pill{padding:5px 8px;border-radius:5px;font-weight:700;font-size:10px;white-space:nowrap}.pill.allowed{background:#e6f7f0;color:#238360}.pill.blocked{background:#fff0e9;color:#ad592b}footer{font-size:11px;color:#8898ac;line-height:1.6;margin-top:20px}.empty{font-size:13px;color:#95a3b4;padding:26px 0}.login-body{min-height:100vh;display:grid;place-items:center;background:linear-gradient(150deg,#10263f,#17385e)}.login-card{background:#fff;width:min(430px,calc(100% - 36px));padding:36px;border-radius:15px;box-shadow:0 25px 70px #07132670}.login-card .brand{margin-bottom:35px}.login-card .brand strong{color:#1b2c46}.login-card .brand small{color:#78899c}.login-card h1{font-size:23px}.login-card .muted{margin-bottom:24px}.login-card input{margin-bottom:17px;height:45px}.full{width:100%;height:44px;margin-top:5px}.login-foot{font-size:10px;text-align:center;color:#92a0ae;margin:24px 0 0}.error{color:#ad362c;background:#fff0ef;padding:11px;border-radius:6px;font-size:12px}@media(max-width:1150px){.sidebar{width:190px}.stats{grid-template-columns:repeat(2,1fr)}.content{padding:25px}.topbar{padding:15px 25px}}@media(max-width:750px){.shell{display:block}.sidebar{width:auto;display:block;padding:15px}.sidebar .brand{display:inline-flex}.sidebar .aside-section,.sidebar .nav,.sidebar-bottom{display:none}.stats,.two-col,.domains-grid{grid-template-columns:1fr}.content{padding:20px 14px}.pageheading{display:block}.updated{text-align:left;margin-top:10px}.filter-group{flex:1 1 100%}.date-options>div{max-width:none}.topbar{padding:12px 16px}.panel{padding:16px}}
 
 .meter{display:block;width:100%;height:7px;border:0;border-radius:9px;overflow:hidden;appearance:none}.meter::-webkit-progress-bar{background:#edf2f8;border-radius:9px}.meter::-webkit-progress-value{background:#397bed;border-radius:9px}.meter.alt::-webkit-progress-value{background:#21a59a}.meter::-moz-progress-bar{background:#397bed;border-radius:9px}.meter.alt::-moz-progress-bar{background:#21a59a}
 
-/* VALLO: destaque de exportacoes e gerenciamento de contas */
+/* AdGuard DNS Reports: destaque de exportacoes e gerenciamento de contas */
 .brand-mark{background:linear-gradient(145deg,#0d88a8,#2355bc)}
 .user-tag{margin-left:auto;margin-right:20px;color:#59718c;font-size:12px}
 .export-top{justify-content:flex-end;margin-bottom:10px}
@@ -815,7 +832,7 @@ cat >"$TMP/style.css" <<'VALLO_ASSET_CSS_END'
 .btn.danger{color:#ae3347;background:#fff3f5;border-color:#ffdce1}
 @media(max-width:750px){.user-row,.inline-user-form{width:100%}.inline-user-form input{flex:1}.export-top{justify-content:flex-start}.user-tag{display:none}}
 
-VALLO_ASSET_CSS_END
+AdGuard DNS Reports_ASSET_CSS_END
 
 for name in app.py core.py; do pct push "$CTID" "$TMP/$name" "$APPDIR/$name"; done
 for name in login.html dashboard.html users.html; do pct push "$CTID" "$TMP/$name" "$APPDIR/templates/$name"; done
@@ -839,9 +856,9 @@ pct exec "$CTID" -- bash -c '
   chmod 750 /opt/dnsreports/data
 '
 if [[ "$MODE" == install ]]; then
-  cat >"$TMP/dnsreports.service" <<'VALLO_GUNICORN_UNIT'
+  cat >"$TMP/dnsreports.service" <<'AdGuard DNS Reports_GUNICORN_UNIT'
 [Unit]
-Description=VALLO Consulta Acesso de Redes - Gunicorn
+Description=AdGuard DNS Reports Relatorios de Consultas DNS - Gunicorn
 Wants=network-online.target
 After=network-online.target
 [Service]
@@ -858,10 +875,10 @@ ReadWritePaths=/opt/dnsreports/data
 PrivateTmp=true
 [Install]
 WantedBy=multi-user.target
-VALLO_GUNICORN_UNIT
-  cat >"$TMP/dnsreports-collector.service" <<'VALLO_COLLECTOR_UNIT'
+AdGuard DNS Reports_GUNICORN_UNIT
+  cat >"$TMP/dnsreports-collector.service" <<'AdGuard DNS Reports_COLLECTOR_UNIT'
 [Unit]
-Description=VALLO Consulta Acesso de Redes - coleta DNS
+Description=AdGuard DNS Reports Relatorios de Consultas DNS - coleta DNS
 Wants=network-online.target
 After=network-online.target
 [Service]
@@ -875,10 +892,10 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ReadWritePaths=/opt/dnsreports/data
 PrivateTmp=true
-VALLO_COLLECTOR_UNIT
-  cat >"$TMP/dnsreports-collector.timer" <<'VALLO_TIMER_UNIT'
+AdGuard DNS Reports_COLLECTOR_UNIT
+  cat >"$TMP/dnsreports-collector.timer" <<'AdGuard DNS Reports_TIMER_UNIT'
 [Unit]
-Description=VALLO Consulta Acesso de Redes - coleta a cada 2 minutos
+Description=AdGuard DNS Reports Relatorios de Consultas DNS - coleta a cada 2 minutos
 [Timer]
 OnBootSec=20s
 OnUnitInactiveSec=120s
@@ -886,7 +903,7 @@ Persistent=true
 Unit=dnsreports-collector.service
 [Install]
 WantedBy=timers.target
-VALLO_TIMER_UNIT
+AdGuard DNS Reports_TIMER_UNIT
   for unit in dnsreports.service dnsreports-collector.service dnsreports-collector.timer; do
     pct push "$CTID" "$TMP/$unit" "/etc/systemd/system/$unit"
   done
@@ -906,21 +923,24 @@ distinguished_name=dn
 x509_extensions=v3_req
 prompt=no
 [dn]
-CN=vallo-consulta-redes.local
+CN=${IP}
 [v3_req]
-subjectAltName=IP:${IP},DNS:vallo-consulta-redes.local
+subjectAltName=IP:${IP}
 CERT
-  pct push "$CTID" "$TMP/openssl.cnf" /root/vallo-openssl.cnf
+  pct push "$CTID" "$TMP/openssl.cnf" /root/adguard-reports-openssl.cnf
   pct exec "$CTID" -- mkdir -p /etc/nginx/ssl
   pct exec "$CTID" -- openssl req -x509 -nodes -newkey rsa:3072 -sha256 -days 825 \
     -keyout /etc/nginx/ssl/dnsreports.key -out /etc/nginx/ssl/dnsreports.crt \
-    -config /root/vallo-openssl.cnf -extensions v3_req >/dev/null 2>&1
+    -config /root/adguard-reports-openssl.cnf -extensions v3_req >/dev/null 2>&1
   pct exec "$CTID" -- chmod 600 /etc/nginx/ssl/dnsreports.key
-  cat >"$TMP/dnsreports.nginx" <<'VALLO_NGINX'
+  cat >"$TMP/dnsreports.nginx" <<'AdGuard DNS Reports_NGINX'
 server {
     listen 80 default_server;
     server_name _;
-    allow 172.20.0.0/16;
+    allow 127.0.0.1;
+    allow 10.0.0.0/8;
+    allow 172.16.0.0/12;
+    allow 192.168.0.0/16;
     deny all;
     return 301 https://$host$request_uri;
 }
@@ -931,7 +951,10 @@ server {
     ssl_certificate_key /etc/nginx/ssl/dnsreports.key;
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_session_tickets off;
-    allow 172.20.0.0/16;
+    allow 127.0.0.1;
+    allow 10.0.0.0/8;
+    allow 172.16.0.0/12;
+    allow 192.168.0.0/16;
     deny all;
     client_max_body_size 1m;
     location / {
@@ -942,7 +965,7 @@ server {
         proxy_read_timeout 130s;
     }
 }
-VALLO_NGINX
+AdGuard DNS Reports_NGINX
   pct push "$CTID" "$TMP/dnsreports.nginx" /etc/nginx/sites-available/dnsreports
   pct exec "$CTID" -- bash -c 'rm -f /etc/nginx/sites-enabled/default; ln -sfn /etc/nginx/sites-available/dnsreports /etc/nginx/sites-enabled/dnsreports'
 else
@@ -965,16 +988,16 @@ ok 'Gunicorn, HTTPS e Nginx ativos.'
 info 'Iniciando coletor automatico (a cada 2 minutos)...'
 pct exec "$CTID" -- systemctl start --no-block dnsreports-collector.service || true
 printf '\n%b============================================================%b\n' "$GREEN" "$RESET"
-ok 'VALLO | Consulta Acesso de Redes pronto!'
+ok 'AdGuard DNS Reports | Relatorios de Consultas DNS pronto!'
 printf '  🌐  Painel:     https://%s/\n' "$IP"
 printf '  👤  Usuarios:   https://%s/usuarios (somente administrador)\n' "$IP"
 printf '  📁  Exportar:   CSV | Excel | PDF (filtros no painel)\n'
 printf '  🗓️   Retencao:   90 dias (espaco no disco deve ser monitorado)\n'
 printf '  🔁  Coleta:     a cada 2 minutos (limites de historico do AdGuard se aplicam)\n'
 printf '  🆔  Container:  %s\n' "$CTID"
-printf '  🛡️   AdGuard:    http://172.20.0.253\n'
+printf '  🛡️   AdGuard:    %s\n' "$(pct exec "$CTID" -- python3 -c 'import json; print(json.load(open("/opt/dnsreports/config.json"))["adguard_url"])')"
 printf '\n  Obs.: HTTPS autoassinado; pode mostrar aviso de certificado.\n'
-printf '  Rede autorizada no Nginx: 172.20.0.0/16\n'
+printf '  Redes liberadas no Nginx (nova instalacao): RFC1918 e loopback\n'
 printf '  Registros DNS nao comprovam navegacao ou uso de aplicativos.\n'
 printf '  Coletor: pct exec %s -- journalctl -u dnsreports-collector -n 40\n' "$CTID"
 printf '%b============================================================%b\n\n' "$GREEN" "$RESET"
