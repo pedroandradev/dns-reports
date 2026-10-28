@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "adguard-dns-reports"
+version = "1.1.0"
+description = "Self-hosted DNS query reports for AdGuard Home"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["Flask>=3.1,<4", "requests>=2.31,<3", "openpyxl>=3.1,<4", "reportlab>=4,<5", "gunicorn>=23,<25"]
+
+[project.scripts]
+adguard-reports-collect = "adguard_dns_reports.collector:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+adguard_dns_reports = ["templates/*.html", "static/*.css"]

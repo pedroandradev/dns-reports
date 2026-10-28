@@ -1,0 +1,11 @@
+[Unit]
+Description=AdGuard DNS Reports - Coleta a cada 2 minutos
+
+[Timer]
+OnBootSec=20s
+OnUnitInactiveSec=120s
+Persistent=true
+Unit=dnsreports-collector.service
+
+[Install]
+WantedBy=timers.target

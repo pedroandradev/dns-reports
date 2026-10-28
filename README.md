@@ -26,6 +26,38 @@ Painel web independente para **consultar, filtrar, classificar e exportar consul
 
 O instalador não presume endereço IP, servidor DNS ou marca de uma empresa. O LXC recebe IP por DHCP e DNS pelas configurações da rede. O fuso horário é herdado do host Proxmox (com fallback para UTC).
 
+## Organização do código
+
+O instalador público continua disponível em um **único comando**, mas não contém mais código HTML, CSS ou Python embutido. O projeto utiliza pacote Python com estrutura `src/`, Flask application factory e Blueprints.
+
+```text
+.
+├── Instalar-DNS-Reports-Proxmox.sh   # bootstrap único
+├── pyproject.toml                     # empacotamento Python
+├── src/adguard_dns_reports/
+│   ├── __init__.py                    # create_app()
+│   ├── wsgi.py                        # entrada Gunicorn
+│   ├── auth.py                        # login e usuários
+│   ├── reports.py                     # dashboard, filtros e exportação
+│   ├── security.py                    # CSRF, cabeçalhos e senhas
+│   ├── collector.py                   # coleta periódica do AdGuard
+│   ├── classification.py              # serviços e categorias DNS
+│   ├── database.py                    # SQLite e migração
+│   ├── config.py                      # leitura de configuração
+│   ├── templates/                     # páginas Jinja/HTML
+│   └── static/                        # CSS
+├── scripts/proxmox/
+│   ├── install.sh                     # provisionamento LXC
+│   ├── nginx/                         # configuração proxy/HTTPS
+│   └── systemd/                       # serviços e timer
+├── tests/                             # testes automatizados
+└── docs/ARCHITECTURE.md               # documentação técnica
+```
+
+Veja [Arquitetura](docs/ARCHITECTURE.md) para o fluxo de instalação, serviços e compatibilidade de migração.
+
+O bootstrap baixa uma cópia do repositório e executa o shell de implantação. A aplicação é instalada por `pip` como pacote Python; os arquivos de interface ficam em `templates/` e `static/`.
+
 ## Instalação
 
 Revise o instalador antes de executar qualquer script remoto como `root`.
@@ -40,7 +72,7 @@ O assistente solicita:
 2. **Usuário e senha do AdGuard**.
 3. **Usuário e senha do administrador do painel** (senha com pelo menos 10 caracteres).
 
-As senhas são solicitadas sem eco no terminal. O instalador cria o próximo CTID disponível, instala os componentes, configura o coletor e apresenta a URL `https://IP_DO_LXC/`.
+As senhas são solicitadas sem eco no terminal. O bootstrap baixa o projeto completo e o instalador cria o próximo CTID disponível, instala os componentes, configura o coletor e apresenta a URL `https://IP_DO_LXC/`.
 
 **Aviso:** o certificado inicial é autoassinado. O navegador pode exibir aviso de segurança; configure um certificado confiável antes de uso mais amplo. Reserve o IP via DHCP para que o endereço permaneça estável.
 
@@ -88,7 +120,7 @@ Após autenticar, selecione um período (1, 7, 30 ou 90 dias, ou intervalo de da
 
 ## Atualizar instalação existente
 
-**Faça backup do CT antes de atualizar.** A atualização preserva o diretório de dados, banco e contas existentes, mas deve ser validada no seu ambiente.
+**Faça backup do CT antes de atualizar.** A atualização mantém o diretório de dados, banco e contas existentes e troca o serviço para usar o pacote Python. Faça backup e homologue antes de atualizar produção.
 
 ```bash
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/pedroandradev/dns-reports/main/Instalar-DNS-Reports-Proxmox.sh)" reports --update ID_DO_CONTAINER

@@ -1,0 +1,23 @@
+name: Python tests and shell syntax
+
+on:
+  push:
+    branches: [main, "refactor/**"]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Shell syntax
+        run: bash -n Instalar-DNS-Reports-Proxmox.sh scripts/proxmox/install.sh
+      - name: Install package and tests
+        run: python -m pip install -e . pytest
+      - name: Compile Python
+        run: python -m compileall -q src
+      - name: Run tests
+        run: pytest -q
