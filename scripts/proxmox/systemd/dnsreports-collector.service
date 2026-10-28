@@ -1,0 +1,16 @@
+[Unit]
+Description=AdGuard DNS Reports - Collector
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=dnsreports
+Group=dnsreports
+WorkingDirectory=/opt/dnsreports
+ExecStart=/opt/dnsreports/venv/bin/adguard-reports-collect
+TimeoutStartSec=900
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/dnsreports/data
+PrivateTmp=true

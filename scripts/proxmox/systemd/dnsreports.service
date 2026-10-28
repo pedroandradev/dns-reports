@@ -1,0 +1,20 @@
+[Unit]
+Description=AdGuard DNS Reports - Web
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=dnsreports
+Group=dnsreports
+WorkingDirectory=/opt/dnsreports
+ExecStart=/opt/dnsreports/venv/bin/gunicorn --workers 2 --threads 2 --bind 127.0.0.1:8088 --timeout 120 adguard_dns_reports.wsgi:app
+Restart=always
+RestartSec=4
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/dnsreports/data
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
