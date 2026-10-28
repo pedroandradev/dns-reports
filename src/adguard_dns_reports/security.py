@@ -19,7 +19,9 @@ def token():
 
 
 def require_csrf():
-    if not hmac.compare_digest(request.form.get('csrf', ''), session.get('csrf', '')):
+    expected = session.get('csrf')
+    supplied = request.form.get('csrf', '')
+    if not expected or not supplied or not hmac.compare_digest(supplied, expected):
         abort(403)
 
 
