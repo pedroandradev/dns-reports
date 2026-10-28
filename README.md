@@ -52,7 +52,7 @@ Os valores abaixo são **exemplos**, não parâmetros obrigatórios:
 REPORTS_BRIDGE=vmbr1 \
 REPORTS_STORAGE=ssd-lvm \
 REPORTS_TEMPLATE_STORAGE=local \
-REPORTS_TIMEZONE=America/Sao_Paulo \
+REPORTS_TIMEZONE=Etc/UTC \
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/pedroandradev/dns-reports/main/Instalar-DNS-Reports-Proxmox.sh)"
 ```
 
