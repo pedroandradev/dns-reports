@@ -127,7 +127,7 @@ with open(p,"w") as f: json.dump(s,f,ensure_ascii=False)
 os.chmod(p,0o640)
 PYUP'
 fi
-info 'Instalando identidade VALLO, painel e gerenciamento de usuarios...'
+info 'Instalando VALLO, relatórios e permissões exclusivas do administrador...'
 cat >"$TMP/app.py" <<'VALLO_ASSET_APP_END'
 """Read-only, internal DNS reporting panel."""
 import csv
@@ -147,7 +147,7 @@ from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 from html import escape
 
-from flask import Flask, Response, abort, redirect, render_template, request, send_file, session, url_for
+from flask import Flask, Response, abort, g, redirect, render_template, request, send_file, session, url_for
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from reportlab.lib.pagesizes import A4, landscape
@@ -210,12 +210,16 @@ def auth_gate():
     c = db_connect()
     try:
         create_schema(c)
-        user = c.execute('SELECT id,username,session_version FROM users WHERE id=?', (uid,)).fetchone()
+        user = c.execute('SELECT id,username,session_version,is_admin FROM users WHERE id=?', (uid,)).fetchone()
     finally:
         c.close()
     if not user or user['session_version'] != session.get('session_version'):
         session.clear()
         return redirect(url_for('login'))
+    # Role is read from the database for every request, not trusted from session or UI.
+    g.is_admin = bool(user['is_admin'])
+    if request.path == '/usuarios' and not g.is_admin:
+        abort(403)
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -261,6 +265,9 @@ def password_hash(password):
 
 @app.route('/usuarios', methods=['GET', 'POST'])
 def usuarios():
+    # Also enforce at the endpoint (GET and POST), including direct URL/API calls.
+    if not getattr(g, 'is_admin', False):
+        abort(403)
     error, success = '', ''
     conn = db_connect()
     create_schema(conn)
@@ -277,7 +284,7 @@ def usuarios():
                     error = 'A senha deve ter entre 10 e 256 caracteres.'
                 else:
                     try:
-                        conn.execute('INSERT INTO users(username,password_hash) VALUES(?,?)',
+                        conn.execute('INSERT INTO users(username,password_hash,is_admin) VALUES(?,?,0)',
                                      (username,password_hash(password)))
                         conn.commit()
                         success = f'Usuário {username} criado.'
@@ -292,7 +299,9 @@ def usuarios():
                 if user is None:
                     error = 'Usuário não encontrado.'
                 elif action == 'delete':
-                    if uid == session['uid']:
+                    if user['is_admin']:
+                        error = 'A conta administradora não pode ser excluída.'
+                    elif uid == session['uid']:
                         error = 'Não é possível excluir seu próprio usuário.'
                     elif conn.execute('SELECT COUNT(*) FROM users').fetchone()[0] <= 1:
                         error = 'É necessário manter pelo menos um usuário.'
@@ -312,7 +321,7 @@ def usuarios():
                         return redirect('/login')
             else:
                 error = 'Operação inválida.'
-        users = conn.execute('SELECT id,username,created_at FROM users ORDER BY username').fetchall()
+        users = conn.execute('SELECT id,username,is_admin,created_at FROM users ORDER BY is_admin DESC,username').fetchall()
     finally:
         conn.close()
     return render_template('users.html', users=users, error=error, success=success,
@@ -571,7 +580,8 @@ def create_schema(c):
         username TEXT NOT NULL UNIQUE COLLATE NOCASE,
         password_hash TEXT NOT NULL,
         session_version INTEGER NOT NULL DEFAULT 0,
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        is_admin INTEGER NOT NULL DEFAULT 0
       );
       CREATE TABLE IF NOT EXISTS client_names (
         ip TEXT PRIMARY KEY,
@@ -579,6 +589,10 @@ def create_schema(c):
         last_checked INTEGER NOT NULL
       );
     ''')
+    # Safe, additive SQLite migration for existing multi-user installations.
+    columns = {r['name'] for r in c.execute('PRAGMA table_info(users)').fetchall()}
+    if 'is_admin' not in columns:
+        c.execute('ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0')
     # Existing installations have a single administrator in config.json.
     # Import it exactly once without changing the credentials or existing data.
     legacy = config()
@@ -587,6 +601,14 @@ def create_schema(c):
             c.execute('INSERT OR IGNORE INTO users(username,password_hash) VALUES(?,?)',
                       (legacy['panel_username'],legacy['panel_password_hash']))
         c.execute("INSERT OR IGNORE INTO metadata(key,value) VALUES('users_imported','true')")
+    # Assign administration only ONCE to the account originally set up by the installer.
+    # Other existing users remain read-only for user management. Re-running the
+    # migration cannot promote a later account with the same username.
+    if not c.execute("SELECT 1 FROM metadata WHERE key='admin_role_migrated_v1'").fetchone():
+        admin_username = legacy.get('panel_username') or 'admin'
+        c.execute('UPDATE users SET is_admin=1 WHERE username=? COLLATE NOCASE',
+                  (admin_username,))
+        c.execute("INSERT INTO metadata(key,value) VALUES('admin_role_migrated_v1','true')")
     c.commit()
 
 
@@ -739,7 +761,7 @@ cat >"$TMP/login.html" <<'VALLO_ASSET_LOGIN_END'
 VALLO_ASSET_LOGIN_END
 cat >"$TMP/dashboard.html" <<'VALLO_ASSET_DASH_END'
 <!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Consulta Acesso de Redes · VALLO</title><link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}"></head><body>
-<div class="shell"><aside class="sidebar"><div class="brand"><div class="brand-mark">◈</div><div><strong>VALLO</strong><small>Consulta Acesso de Redes</small></div></div><div class="aside-section">PAINEL</div><a class="nav active" href="/">▦ <span>Visão geral</span></a><a class="nav" href="#consultas">⌕ <span>Consultas DNS</span></a><a class="nav" href="/usuarios">♙ <span>Usuários do painel</span></a><a class="nav" href="#servicos">◫ <span>Serviços e domínios</span></a><div class="sidebar-bottom"><span class="status-dot"></span> Servidor interno <div class="aside-note">Relatórios de consultas DNS<br>Não equivale a histórico de navegação.</div></div></aside>
+<div class="shell"><aside class="sidebar"><div class="brand"><div class="brand-mark">◈</div><div><strong>VALLO</strong><small>Consulta Acesso de Redes</small></div></div><div class="aside-section">PAINEL</div><a class="nav active" href="/">▦ <span>Visão geral</span></a><a class="nav" href="#consultas">⌕ <span>Consultas DNS</span></a>{% if g.is_admin %}<a class="nav" href="/usuarios">♙ <span>Usuários do painel</span></a>{% endif %}<a class="nav" href="#servicos">◫ <span>Serviços e domínios</span></a><div class="sidebar-bottom"><span class="status-dot"></span> Servidor interno <div class="aside-note">Relatórios de consultas DNS<br>Não equivale a histórico de navegação.</div></div></aside>
 <main class="main"><div class="topbar"><span>VALLO <span class="crumb">/ Consulta Acesso de Redes</span></span><span class="user-tag">{{username}}</span><form method="post" action="/logout"><input type="hidden" name="csrf" value="{{csrf}}"><button class="btn subtle" type="submit">Sair ↗</button></form></div><div class="content"><div class="pageheading"><div><div class="eyebrow">MONITORAMENTO DNS</div><h1>Consulta Acesso de Redes</h1><p class="muted">Consultas realizadas pelos dispositivos monitorados pelo AdGuard Home.</p></div><div class="updated"><div class="actions export-top"><a class="btn outline" href="{{ url_for('export',format_name='csv') }}?{{ request.query_string.decode() }}">↓ CSV</a><a class="btn primary" href="{{ url_for('export',format_name='xlsx') }}?{{ request.query_string.decode() }}">↓ Excel</a><a class="btn outline" href="{{ url_for('export',format_name='pdf') }}?{{ request.query_string.decode() }}">↓ PDF</a></div>Última coleta<br><strong>{{ dt(meta.get('last_success','')) if meta.get('last_success') else 'Aguardando primeira coleta' }}</strong></div></div>
 <form class="filters" method="get"><div class="filter-group"><label for="period">Período</label><select name="period" id="period"><option value="1" {% if period==1 %}selected{% endif %}>Últimas 24 horas</option><option value="7" {% if period==7 %}selected{% endif %}>Últimos 7 dias</option><option value="30" {% if period==30 %}selected{% endif %}>Últimos 30 dias</option><option value="90" {% if period==90 %}selected{% endif %}>Últimos 90 dias</option></select></div>
 <div class="filter-group"><label for="client">Computador</label><select name="client" id="client"><option value="">Todos os computadores</option>{% for c in choices %}<option value="{{c.ip}}" {% if args.get('client','')==c.ip %}selected{% endif %}>{{ c.name or c.ip }} {% if c.name and c.name != c.ip %}({{c.ip}}){% endif %}</option>{% endfor %}</select></div>
@@ -758,13 +780,13 @@ cat >"$TMP/dashboard.html" <<'VALLO_ASSET_DASH_END'
 VALLO_ASSET_DASH_END
 cat >"$TMP/users.html" <<'VALLO_ASSET_USERS_END'
 <!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Usuários · Consulta Acesso de Redes | VALLO</title><link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}"></head><body>
-<div class="shell"><aside class="sidebar"><div class="brand"><div class="brand-mark">◈</div><div><strong>VALLO</strong><small>Consulta Acesso de Redes</small></div></div><div class="aside-section">PAINEL</div><a class="nav" href="/">▦ <span>Visão geral</span></a><a class="nav active" href="/usuarios">♙ <span>Usuários do painel</span></a><div class="sidebar-bottom"><span class="status-dot"></span> Servidor interno<div class="aside-note">Todos os usuários cadastrados possuem as mesmas permissões.</div></div></aside>
+<div class="shell"><aside class="sidebar"><div class="brand"><div class="brand-mark">◈</div><div><strong>VALLO</strong><small>Consulta Acesso de Redes</small></div></div><div class="aside-section">PAINEL</div><a class="nav" href="/">▦ <span>Visão geral</span></a><a class="nav active" href="/usuarios">♙ <span>Usuários do painel</span></a><div class="sidebar-bottom"><span class="status-dot"></span> Servidor interno<div class="aside-note">Somente o administrador pode criar, excluir e redefinir senhas de usuários.</div></div></aside>
 <main class="main"><div class="topbar"><span>VALLO <span class="crumb">/ Usuários</span></span><form action="/logout" method="post"><input type="hidden" name="csrf" value="{{csrf}}"><button class="btn subtle">Sair ↗</button></form></div>
-<div class="content"><div class="pageheading"><div><div class="eyebrow">CONFIGURAÇÕES DE ACESSO</div><h1>Usuários do painel</h1><p class="muted">Crie acessos individuais para gerar consultas e relatórios.</p></div><a class="btn outline" href="/">← Voltar aos relatórios</a></div>
+<div class="content"><div class="pageheading"><div><div class="eyebrow">CONFIGURAÇÕES DE ACESSO</div><h1>Usuários do painel</h1><p class="muted">Apenas o administrador gerencia usuários. As demais contas podem consultar e exportar relatórios.</p></div><a class="btn outline" href="/">← Voltar aos relatórios</a></div>
 {% if error %}<div class="error alert">{{error}}</div>{% endif %}{% if success %}<div class="success alert">{{success}}</div>{% endif %}
 <div class="two-col"><section class="panel"><div class="panel-head"><h2>Adicionar usuário</h2></div><form method="post" class="user-form"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="action" value="add"><label for="new-user">Usuário</label><input id="new-user" name="username" autocomplete="off" minlength="3" maxlength="40" pattern="[A-Za-z0-9._-]{3,40}" placeholder="Ex.: analista.rede" required><label for="new-pass">Senha (mínimo de 10 caracteres)</label><input id="new-pass" name="password" type="password" autocomplete="new-password" minlength="10" maxlength="256" required><button class="btn primary">Criar usuário</button></form></section>
 <section class="panel"><div class="panel-head"><h2>Usuários existentes</h2><p>Senha pode ser redefinida individualmente</p></div>
-{% for user in users %}<div class="user-row"><div class="user-name"><strong>{{user.username}}</strong><small>Desde {{user.created_at}}</small></div><form method="post" class="inline-user-form"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="action" value="reset"><input type="hidden" name="user_id" value="{{user.id}}"><input name="password" type="password" autocomplete="new-password" minlength="10" maxlength="256" placeholder="Nova senha" required aria-label="Nova senha para {{user.username}}"><button class="btn outline" title="Alterar senha">Alterar senha</button></form>{% if user.username != username %}<form method="post"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="action" value="delete"><input type="hidden" name="user_id" value="{{user.id}}"><button class="btn danger">Excluir</button></form>{% endif %}</div>{% else %}<div class="empty">Nenhum usuário cadastrado.</div>{% endfor %}
+{% for user in users %}<div class="user-row"><div class="user-name"><strong>{{user.username}}</strong>{% if user.is_admin %} <span class="pill allowed">Administrador</span>{% endif %}<small>Desde {{user.created_at}}</small></div><form method="post" class="inline-user-form"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="action" value="reset"><input type="hidden" name="user_id" value="{{user.id}}"><input name="password" type="password" autocomplete="new-password" minlength="10" maxlength="256" placeholder="Nova senha" required aria-label="Nova senha para {{user.username}}"><button class="btn outline" title="Alterar senha">Alterar senha</button></form>{% if not user.is_admin %}<form method="post"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="action" value="delete"><input type="hidden" name="user_id" value="{{user.id}}"><button class="btn danger">Excluir</button></form>{% endif %}</div>{% else %}<div class="empty">Nenhum usuário cadastrado.</div>{% endfor %}
 </section></div><footer>VALLO · Consulta Acesso de Redes | Acesso restrito à rede interna.</footer></div></main></div></body></html>
 VALLO_ASSET_USERS_END
 cat >"$TMP/style.css" <<'VALLO_ASSET_CSS_END'
@@ -945,7 +967,7 @@ pct exec "$CTID" -- systemctl start --no-block dnsreports-collector.service || t
 printf '\n%b============================================================%b\n' "$GREEN" "$RESET"
 ok 'VALLO | Consulta Acesso de Redes pronto!'
 printf '  🌐  Painel:     https://%s/\n' "$IP"
-printf '  👤  Usuarios:   https://%s/usuarios\n' "$IP"
+printf '  👤  Usuarios:   https://%s/usuarios (somente administrador)\n' "$IP"
 printf '  📁  Exportar:   CSV | Excel | PDF (filtros no painel)\n'
 printf '  🗓️   Retencao:   90 dias (espaco no disco deve ser monitorado)\n'
 printf '  🔁  Coleta:     a cada 2 minutos (limites de historico do AdGuard se aplicam)\n'
