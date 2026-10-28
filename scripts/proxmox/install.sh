@@ -93,8 +93,12 @@ else
 fi
 # The repository is deployed as a Python package. No source generation here.
 pct exec "$CTID" -- mkdir -p "$APPDIR/source"
-# tar stream into LXC using pct exec stdin (no cp-to-rootfs shortcuts)
-tar -C "$ROOT" -cf - pyproject.toml README.md src | pct exec "$CTID" -- tar -xf - -C "$APPDIR/source"
+# Copy one versioned archive with pct push; do not rely on LXC stdin forwarding.
+tar -C "$ROOT" -czf "$ROOT/.adguard-source-tmp.tar.gz" pyproject.toml README.md src
+pct push "$CTID" "$ROOT/.adguard-source-tmp.tar.gz" /tmp/adguard-source.tar.gz
+rm -f "$ROOT/.adguard-source-tmp.tar.gz"
+pct exec "$CTID" -- tar -xzf /tmp/adguard-source.tar.gz -C "$APPDIR/source"
+pct exec "$CTID" -- rm -f /tmp/adguard-source.tar.gz
 pct exec "$CTID" -- "$APPDIR/venv/bin/pip" install --no-cache-dir --upgrade "$APPDIR/source"
 if [[ "$MODE" == install ]]; then
   pct push "$CTID" "$ROOT/.adguard-config-tmp.json" "$APPDIR/config.json"
