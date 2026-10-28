@@ -1,176 +1,130 @@
-# VALLO | Consulta Acesso de Redes
+# AdGuard DNS Reports
 
-Painel web interno para consultar e exportar o histórico de **consultas DNS** do [AdGuard Home](https://adguard.com/pt_br/adguard-home/overview.html), com identificação de computadores, classificação aproximada de serviços e controle de usuários.
+Painel web independente para **consultar, filtrar, classificar e exportar consultas DNS do [AdGuard Home](https://github.com/AdguardTeam/AdGuardHome)**. Executa em um container LXC Debian 13 no Proxmox VE e permite que usuários autorizados utilizem o navegador, sem instalar scripts nos computadores.
 
-O projeto instala a aplicação em um **container LXC Debian 13 no Proxmox VE**. Após a instalação, os usuários acessam os relatórios pelo navegador, sem instalar scripts em seus computadores.
-
-> **Importante:** consultas DNS não comprovam navegação efetiva em um site ou uso de um aplicativo. O painel registra nomes de domínio consultados, não URLs completas nem conteúdo do tráfego.
+> **Escopo:** o painel analisa consultas DNS recebidas pelo AdGuard. Uma consulta a um domínio não comprova que uma pessoa navegou em determinada página, nem identifica de forma conclusiva o aplicativo utilizado. Não mostra URLs completas nem conteúdo HTTPS.
 
 ## Funcionalidades
 
-- Painel em português com identidade **VALLO — Consulta Acesso de Redes**.
-- Histórico de consultas DNS importado da API do AdGuard Home.
-- Hostname quando disponível (DNS reverso ou informações do cliente); caso contrário, IP.
-- Classificação **aproximada** por serviço/categoria, preservando o domínio original.
-- Filtros por período, computador, domínio/serviço e situação (permitido/bloqueado).
-- Exportação dos dados filtrados em **CSV**, **Excel (.xlsx)** e **PDF**.
-- Contas individuais com login e senha.
-- **Somente a conta administradora inicial** pode criar, excluir e redefinir senhas de outros usuários. As demais contas podem consultar e exportar relatórios.
-- Banco SQLite no próprio container, com retenção configurada para **90 dias** e coleta automática a cada aproximadamente **2 minutos**.
+- Histórico DNS obtido por API, arquivado localmente em SQLite.
+- Identificação de clientes por hostname quando disponível; caso contrário, pelo IP.
+- Identificação **aproximada** de serviços e categorias pelo domínio consultado.
+- Filtros por período, hostname/IP, domínio/serviço e consultas permitidas ou bloqueadas.
+- Exportação em **CSV**, **Excel (.xlsx)** e **PDF**.
+- Contas individuais: somente o administrador inicial pode gerenciar usuários; os demais consultam e exportam relatórios.
+- Coleta programada a cada aproximadamente **2 minutos** e retenção local padrão de **90 dias**.
+- Painel HTTPS por Nginx, backend Flask/Gunicorn e certificado inicial autoassinado.
 
-## Requisitos e configuração atual
+## Requisitos
 
-O instalador foi preparado para o ambiente da VALLO e utiliza estas configurações **sem perguntar durante a instalação**:
+- Host **Proxmox VE 8 ou 9**, acesso como `root` para instalar.
+- Internet e repositórios Debian acessíveis pelo novo LXC.
+- AdGuard Home previamente instalado, com API administrativa acessível a partir do LXC e **registro de consultas DNS habilitado**.
+- Rede com DHCP no segmento/bridge usado pelo container (padrão `vmbr0`).
+- Storages Proxmox disponíveis: padrão `local-lvm` para o disco e `local` para templates.
+- Recursos padrão do container: Debian 13 não privilegiado, **2 vCPU, 1 GB de RAM e 8 GB de disco**. Verifique a capacidade para o volume de consultas.
 
-| Item | Configuração |
+O instalador não presume endereço IP, servidor DNS ou marca de uma empresa. O LXC recebe IP por DHCP e DNS pelas configurações da rede. O fuso horário é herdado do host Proxmox (com fallback para UTC).
+
+## Instalação
+
+Revise o instalador antes de executar qualquer script remoto como `root`.
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/pedroandradev/dns-reports/main/Instalar-DNS-Reports-Proxmox.sh)"
+```
+
+O assistente solicita:
+
+1. **URL do AdGuard Home**: exemplo `http://192.168.1.10` ou `http://192.168.1.10:3000`, conforme a porta efetivamente configurada.
+2. **Usuário e senha do AdGuard**.
+3. **Usuário e senha do administrador do painel** (senha com pelo menos 10 caracteres).
+
+As senhas são solicitadas sem eco no terminal. O instalador cria o próximo CTID disponível, instala os componentes, configura o coletor e apresenta a URL `https://IP_DO_LXC/`.
+
+**Aviso:** o certificado inicial é autoassinado. O navegador pode exibir aviso de segurança; configure um certificado confiável antes de uso mais amplo. Reserve o IP via DHCP para que o endereço permaneça estável.
+
+### Personalizar infraestrutura (opcional)
+
+Os valores abaixo são **exemplos**, não parâmetros obrigatórios:
+
+```bash
+REPORTS_BRIDGE=vmbr1 \
+REPORTS_STORAGE=ssd-lvm \
+REPORTS_TEMPLATE_STORAGE=local \
+REPORTS_TIMEZONE=America/Sao_Paulo \
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/pedroandradev/dns-reports/main/Instalar-DNS-Reports-Proxmox.sh)"
+```
+
+| Variável | Padrão |
 | --- | --- |
-| Proxmox | VE 8/9 com `pct`, `pveam`, `pvesh` e acesso à internet |
-| Sistema do LXC | Debian 13, não privilegiado |
-| ID do LXC | Próximo ID disponível no Proxmox |
-| Bridge | `vmbr0` |
-| Rede | IPv4 por **DHCP** |
-| DNS configurado no LXC | `172.20.0.254` (pfSense) |
-| AdGuard Home | `http://172.20.0.253` |
-| Armazenamento de disco | `local-lvm` |
-| Armazenamento de templates | `local` |
-| Recursos | 2 vCPU, 1 GB RAM, 8 GB de disco |
-| Histórico próprio | 90 dias |
-| Coleta | Timer systemd, aproximadamente a cada 2 minutos |
-| Acesso web | HTTPS com certificado autoassinado |
-| Rede autorizada no Nginx | `172.20.0.0/16` |
+| `REPORTS_BRIDGE` | `vmbr0` |
+| `REPORTS_STORAGE` | `local-lvm` |
+| `REPORTS_TEMPLATE_STORAGE` | `local` |
+| `REPORTS_TIMEZONE` | Fuso horário do Proxmox; fallback `Etc/UTC` |
 
-A bridge, o DHCP e os storages devem existir e estar operacionais. O servidor AdGuard precisa estar acessível a partir do novo container. O instalador usa valores específicos da rede VALLO; **revise o código antes de utilizá-lo em outra infraestrutura**.
+O instalador exige pelo menos 10 GiB disponíveis no storage escolhido. A criação falhará se o template, os storages ou a bridge não estiverem disponíveis.
 
-## Instalação automática
+## Acesso e segurança
 
-Execute no **shell do Proxmox como `root`**:
+- O painel usa **HTTPS** e exige autenticação.
+- Apenas a conta administradora original pode criar, excluir e redefinir senhas de usuários, na rota `/usuarios`. O backend bloqueia acesso direto por usuários comuns com **403**.
+- Os demais usuários podem consultar, filtrar e exportar relatórios.
+- Na instalação nova, o Nginx permite redes **RFC 1918** (10/8, 172.16/12, 192.168/16) e loopback. **Restringir a hosts/sub-redes autorizados no firewall e, se necessário, no Nginx é responsabilidade do operador.** Não exponha o painel diretamente à internet.
+- As credenciais administrativas do AdGuard são armazenadas **apenas no container**, no arquivo `/opt/dnsreports/config.json`, com permissões de leitura restritas.
+- Nunca publique senhas, IPs internos reais, `config.json`, histórico, banco SQLite nem relatórios de usuários no repositório.
 
-```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/pedroandradev/dns-reports/refs/heads/main/Instalar-DNS-Reports-Proxmox.sh)"
-```
+> Se informações sensíveis já foram publicadas em commits antigos, removê-las dos arquivos atuais **não apaga o histórico do Git**. Faça rotação de credenciais expostas e considere reescrever o histórico com os procedimentos oficiais do GitHub.
 
-O assistente solicita apenas:
+## Consultas e exportação
 
-1. Usuário do painel administrativo do AdGuard.
-2. Senha do painel administrativo do AdGuard.
-3. Nome de usuário do administrador do novo painel.
-4. Senha do administrador do novo painel (mínimo de 10 caracteres).
+Após autenticar, selecione um período (1, 7, 30 ou 90 dias, ou intervalo de datas), um cliente, domínio/serviço e estado. Os botões **CSV**, **Excel** e **PDF** exportam os dados filtrados.
 
-Ele cria o LXC, instala Python, Flask, Gunicorn e Nginx, aplica as permissões, configura HTTPS e inicia o coletor e o painel.
+- CSV e XLSX: limite de **100.000 linhas por arquivo**.
+- PDF: limite de **1.000 linhas**.
+- A primeira coleta tenta importar até **7 dias retroativos**, desde que esses dados ainda existam no registro do AdGuard e estejam dentro dos limites de paginação.
+- O histórico local não recupera consultas que o AdGuard já apagou. Monitore o espaço de disco para reter 90 dias.
+- Para ver **hostnames**, configure registros PTR (DNS reverso) no resolvedor adequado. A ausência de PTR não impede relatórios por IP.
 
-Ao concluir, o endereço é exibido como:
+## Atualizar instalação existente
 
-```text
-https://IP_RECEBIDO_VIA_DHCP/
-```
-
-**Recomendado:** crie uma reserva DHCP no pfSense para o novo container. Como o certificado inicial foi emitido para o IP recebido durante a instalação, uma alteração posterior do IP pode ocasionar alerta de certificado.
-
-### Conferir o IP do container
-
-Substitua `103` pelo ID mostrado ao final da instalação:
+**Faça backup do CT antes de atualizar.** A atualização preserva o diretório de dados, banco e contas existentes, mas deve ser validada no seu ambiente.
 
 ```bash
-pct exec 103 -- ip -4 -o addr show dev eth0
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/pedroandradev/dns-reports/main/Instalar-DNS-Reports-Proxmox.sh)" reports --update ID_DO_CONTAINER
 ```
 
-O navegador poderá alertar sobre o certificado **autoassinado**. Para uso corporativo, considere instalar um certificado confiável e restringir o acesso a equipes autorizadas.
+Substitua `ID_DO_CONTAINER` pelo ID real, como `105`. Não use o comando de instalação nova para atualizar um container existente.
 
-## Atualizar um painel já instalado
+Instalações anteriores com a antiga identidade visual podem migrar o painel sem recriar o LXC. Configurações locais preservadas incluem URL e credenciais do AdGuard. Na atualização, a retenção será ajustada para 90 dias.
 
-**Faça backup do container antes de atualizar.** Para o container atualmente utilizado pela VALLO (ID **103**):
+## Diagnóstico e manutenção
+
+Substitua `ID_DO_CONTAINER` pelo ID da instalação nos exemplos:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/pedroandradev/dns-reports/refs/heads/main/Instalar-DNS-Reports-Proxmox.sh)" vallo --update 103
+pct exec ID_DO_CONTAINER -- systemctl status dnsreports nginx --no-pager
+pct exec ID_DO_CONTAINER -- journalctl -u dnsreports -n 50 --no-pager
+pct exec ID_DO_CONTAINER -- journalctl -u dnsreports-collector -n 50 --no-pager
+pct exec ID_DO_CONTAINER -- systemctl list-timers --all | grep dnsreports
+pct exec ID_DO_CONTAINER -- systemctl start dnsreports-collector.service
 ```
 
-Para outro ID, substitua `103`. A atualização altera os arquivos da aplicação e faz a migração necessária da estrutura de usuários; foi projetada para **preservar credenciais e banco de dados existentes**, mas backup e validação continuam recomendados.
+Estrutura interna:
 
-Não utilize o comando de **instalação nova** para tentar atualizar um container existente.
+- Código e ambiente Python: `/opt/dnsreports/`
+- Credenciais/configuração privada: `/opt/dnsreports/config.json`
+- Histórico e SQLite: `/opt/dnsreports/data/`
+- Serviços: `dnsreports.service`, `dnsreports-collector.service` e `dnsreports-collector.timer`
 
-## Usuários e permissões
+## Privacidade e responsabilidade
 
-Após fazer login como **administrador inicial**, abra a seção **Usuários do painel** (rota `/usuarios`). Ali é possível criar novas contas, redefinir senhas e excluir usuários comuns.
+Registros DNS podem revelar hábitos, dispositivos e informações pessoais. Restrinja os acessos, mantenha política de retenção transparente e observe leis e políticas de privacidade aplicáveis (por exemplo, LGPD ou GDPR, conforme a localidade).
 
-| Permissão | Administrador inicial | Usuário comum |
-| --- | :---: | :---: |
-| Visualizar consultas e gráficos | ✅ | ✅ |
-| Filtrar por domínio, período e computador | ✅ | ✅ |
-| Exportar CSV, Excel e PDF | ✅ | ✅ |
-| Criar e gerenciar contas | ✅ | ❌ |
+O software é uma ferramenta de relatórios DNS, **não** um sistema de captura de tráfego, histórico de navegação completo ou identificação comprovada de aplicativos.
 
-O controle é aplicado **no servidor**, não apenas ocultando o menu. Usuários comuns que tentarem acessar `/usuarios` diretamente recebem **HTTP 403**. A conta administrativa original não pode ser excluída pela interface.
+## Projeto
 
-## Consultar e exportar relatórios
+O projeto é independente e não é um produto oficial do AdGuard Home ou do Proxmox.
 
-1. Entre no painel em `https://IP_DO_LXC/`.
-2. Selecione o período (24 horas, 7, 30 ou 90 dias, ou datas personalizadas).
-3. Opcionalmente, escolha computador/hostname, domínio ou serviço e situação.
-4. Use os botões **CSV**, **Excel** ou **PDF** na seção de consultas.
-
-As exportações respeitam os filtros selecionados. Atualmente, há limite de **100.000 registros por arquivo CSV/Excel** e **1.000 por PDF**. Para períodos grandes, divida a consulta em intervalos menores.
-
-### Registro dos hostnames
-
-Para o nome do computador aparecer, é necessário haver informações do cliente no AdGuard ou **DNS reverso (PTR)** funcional. No ambiente da VALLO, o pfSense pode servir os registros PTR dos clientes DHCP.
-
-Exemplo de teste a partir do Windows:
-
-```cmd
-nslookup 172.20.11.153 172.20.0.253
-```
-
-Quando não houver hostname disponível, o painel pode mostrar somente o IP.
-
-### Coleta e armazenamento
-
-- A primeira coleta tenta importar até **7 dias anteriores**, respeitando os registros ainda disponíveis no AdGuard e limites de paginação.
-- As próximas coletas são programadas para aproximadamente **2 minutos**.
-- O banco local retém registros por até **90 dias**, sujeitos ao espaço em disco e à continuidade das coletas.
-- Se algum cliente não utilizar o AdGuard como DNS, suas consultas podem não aparecer.
-- A classificação dos serviços é uma **inferência a partir do domínio DNS**, não uma identificação conclusiva do aplicativo executado.
-
-## Comandos de manutenção
-
-Troque `103` pelo ID correto:
-
-```bash
-# Estado dos serviços
-pct exec 103 -- systemctl status dnsreports nginx --no-pager
-
-# Últimas mensagens do painel
-pct exec 103 -- journalctl -u dnsreports -n 50 --no-pager
-
-# Últimas mensagens da coleta
-pct exec 103 -- journalctl -u dnsreports-collector -n 50 --no-pager
-
-# Verificar agendamento das coletas
-pct exec 103 -- systemctl list-timers --all | grep dnsreports
-
-# Executar uma coleta manual
-pct exec 103 -- systemctl start dnsreports-collector.service
-
-# Testar HTTPS dentro do container
-pct exec 103 -- curl -k -I https://127.0.0.1/login
-```
-
-Arquivos principais no LXC:
-
-- Aplicação: `/opt/dnsreports/`
-- Configuração privada do AdGuard e credenciais iniciais: `/opt/dnsreports/config.json`
-- Banco e histórico: `/opt/dnsreports/data/`
-- Serviços: `dnsreports.service` e `dnsreports-collector.service`
-- Agendamento: `dnsreports-collector.timer`
-
-## Segurança e cuidados
-
-- O instalador executa comandos como **root no Proxmox**. Leia o código e utilize somente a versão do repositório em que você confia.
-- **Não publique** senhas, arquivos `config.json`, bancos de dados nem relatórios com dados de usuários no GitHub.
-- Restrinja o acesso ao painel à rede e aos responsáveis autorizados. O Nginx do instalador libera apenas `172.20.0.0/16`.
-- O acesso HTTPS inicial usa certificado autoassinado; prefira um certificado confiável em produção.
-- O sistema consulta a API do AdGuard, mas **não substitui** o AdGuard, o pfSense nem o ntopng.
-- As informações de consultas DNS podem ser dados pessoais. Defina política interna de acesso, uso e retenção adequada à finalidade.
-
----
-
-**Projeto interno VALLO — Consulta Acesso de Redes.**
+Para sugerir melhorias, abra uma issue ou pull request neste repositório.
