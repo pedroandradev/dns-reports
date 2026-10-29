@@ -45,6 +45,8 @@ def create_schema(c):
     ''')
     from .traffic.storage import create_tables
     create_tables(c)
+    from .dns_evidence import create_table
+    create_table(c)
     # Safe, additive SQLite migration for existing multi-user installations.
     columns = {r['name'] for r in c.execute('PRAGMA table_info(users)').fetchall()}
     if 'is_admin' not in columns:

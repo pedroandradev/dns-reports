@@ -13,6 +13,9 @@
 <label for="ifid">Identificador da interface LAN no ntopng (ifid)</label><input id="ifid" name="ifid" type="number" min="0" max="1000000" value="{{ settings.ifid }}">
 <label for="session_idle_seconds">Confirmar ausência após (segundos)</label><input id="session_idle_seconds" name="session_idle_seconds" type="number" min="60" max="3600" value="{{ settings.get('session_idle_seconds',120) }}">
 <p class="muted">Conexões do mesmo equipamento e serviço próximas desse intervalo são agrupadas. Um encerramento é estimado somente após esse tempo sem aparecer e pelo menos duas coletas completas. Falha de coleta não confirma encerramento.</p>
+<input type="hidden" name="dns_enrichment_present" value="1">
+<label class="check-label"><input type="checkbox" name="dns_enrichment" {% if settings.get('dns_enrichment',True) %}checked{% endif %}> Usar respostas DNS do AdGuard para inferir destinos sem nome</label>
+<p class="muted">Exige o mesmo IP de computador e destino, com início do fluxo dentro da validade da resposta DNS. Um domínio é uma inferência; vários domínios mantêm o destino ambíguo. Só funciona quando o AdGuard recebe o IP real do cliente.</p>
 <label class="check-label"><input type="checkbox" name="verify_tls" {% if settings.verify_tls %}checked{% endif %}> Validar certificado HTTPS</label>
 <label for="local_networks">Redes internas (CIDRs, separados por espaço ou linha)</label><textarea id="local_networks" name="local_networks" rows="4" placeholder="10.20.0.0/16">{{ settings.local_networks }}</textarea>
 <p class="muted">Inclua todas as redes internas e de VPN corporativa para excluí-las da classificação de internet. Use uma única interface de captura para evitar duplicidade.</p>

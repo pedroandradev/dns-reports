@@ -7,7 +7,7 @@ licença para consultar os endpoints usados aqui.
 
 ## Visão principal de acessos
 
-A versão 1.3.0 prioriza computador, serviço/site, tráfego, duração e estado em
+A versão 1.4.0 prioriza computador, serviço/site, tráfego, duração e estado em
 /acessos e na página inicial. A consulta DNS permanece em /dns; os rankings de
 banda seguem em /trafego. Consulte [ACCESSES.md](ACCESSES.md) para agrupamento,
 identificação do destino, ativo/encerrado estimado e permissões.
@@ -23,8 +23,8 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/pedroandradev/dns-report
 A versão deve estar integrada à main. Para homologar a branch desta alteração:
 
 ~~~bash
-REPORTS_REF=feat/access-sessions \
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/pedroandradev/dns-reports/feat/access-sessions/Instalar-DNS-Reports-Proxmox.sh)" reports --update ID_DO_CONTAINER
+REPORTS_REF=fix/destination-identification \
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/pedroandradev/dns-reports/fix/destination-identification/Instalar-DNS-Reports-Proxmox.sh)" reports --update ID_DO_CONTAINER
 ~~~
 
 O comando não cria outro CT e não solicita novamente as credenciais do AdGuard
@@ -38,8 +38,8 @@ Há indisponibilidade temporária do painel durante a atualização. Antes de
 produção, mantenha também um backup/snapshot do CT pelo Proxmox.
 
 A migração adiciona tabelas traffic_* ao mesmo banco SQLite. Não remove nem
-converte a tabela de consultas DNS. O ntopng fica desabilitado até o administrador
-salvar sua configuração.
+converte a tabela de consultas DNS. Uma integração nova fica desabilitada até o administrador
+salvar sua configuração. Uma integração existente mantém seu estado e credenciais.
 
 ## Configurar pelo painel
 
@@ -110,9 +110,10 @@ queda de contador ou reativação da fonte cria uma nova base, sem inventar byte
 Uma falha na consulta não substitui a base anterior por zero. Bases de equipamentos sem atualização por 24 horas e bases de fluxos sem atualização por 10 minutos expiram; seu retorno cria uma nova base.
 
 Contadores de host trazem bytes enviados e recebidos. A lista de aplicações traz
-total por aplicação. O endpoint de fluxos ativos usado não fornece contadores
-exatos por sentido; percentuais arredondados não são convertidos em downloads
-ou uploads supostamente exatos. Campos sem essa informação ficam vazios.
+total por aplicação. As medições de internet utilizam o total do fluxo para
+manter compatibilidade entre a API detalhada e a básica. Percentuais da API
+básica não são convertidos em downloads/uploads supostamente exatos; esses
+campos permanecem vazios no relatório de consumo.
 
 O coletor usa paginação, não apenas os primeiros/top 5 equipamentos. Há limites
 de 10.000 registros por lista e orçamento de tempo para consultas de aplicações.
@@ -157,6 +158,11 @@ de os fluxos detalhados mais antigos serem removidos.
 Para uma auditoria completa de todas as conexões, será necessária uma origem
 persistente de fluxos/exportação compatível com a edição do ntopng ou outro
 coletor. Consultas periódicas à API Community não oferecem essa garantia.
+
+A partir da versão 1.4.0, a coleta prefere a lista detalhada de fluxos, com
+nome por fluxo quando disponível, e usa respostas DNS do AdGuard como inferência
+opcional. Consulte [IDENTIFICATION.md](IDENTIFICATION.md) para fontes, limites
+e diagnóstico de TLS/Unknown/TooEarly.
 
 ## Serviços e diagnóstico
 

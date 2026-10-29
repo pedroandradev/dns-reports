@@ -6,7 +6,7 @@ from urllib.parse import urlsplit
 
 DEFAULTS = {"enabled": False, "url": "", "username": "", "password": "",
             "ifid": 0, "verify_tls": True, "local_networks": [], "locations": [],
-            "source": "", "revision": "", "session_idle_seconds": 120}
+            "source": "", "revision": "", "session_idle_seconds": 120, "dns_enrichment": True}
 
 
 def load_settings(conn):
@@ -82,6 +82,9 @@ def validate(form, previous):
         raise ValueError("Para habilitar, informe URL, usuário, senha e redes internas.")
     settings = {**previous, "enabled": enabled, "url": url, "username": username,
                 "password": password, "ifid": ifid, "session_idle_seconds": idle,
+                "dns_enrichment": (form.get("dns_enrichment") == "on"
+                                   if form.get("dns_enrichment_present") == "1"
+                                   else previous.get("dns_enrichment", True)),
                 "verify_tls": form.get("verify_tls") == "on",
                 "local_networks": local, "locations": locations, "revision": uuid.uuid4().hex}
     # A new source prevents comparisons across appliances, interfaces or network policies.

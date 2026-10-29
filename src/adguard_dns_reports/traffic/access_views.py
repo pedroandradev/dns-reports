@@ -18,6 +18,7 @@ def report_data():
     start, end, selected = filters()
     selected.update(
         state=request.args.get("state", "all"),
+        kind=request.args.get("kind", "all"),
         computer=request.args.get("computer", "").strip()[:160],
         refresh=request.args.get("refresh", "1") == "1",
     )
@@ -49,9 +50,11 @@ def report_data():
     if selected["application"]:
         search = selected["application"].casefold()
         grouped = [row for row in grouped if search in row["service"].casefold()
-                   or any(search in target.casefold() for target in row["destinations"])
+                   or any(search in target.casefold() for target in row["destinations"] + row["dns_names"])
                    or any(search in flow["application"].casefold() or search in flow["remote_ip"]
                           for flow in row["flows"])]
+    if selected["kind"] in ("identified", "unidentified", "technical", "pending"):
+        grouped = [row for row in grouped if row["kind"] == selected["kind"]]
     if selected["state"] == "unknown":
         grouped = [row for row in grouped if row["state"] in ("unknown", "paused", "legacy")]
     elif selected["state"] in ("active", "pending", "ended"):
@@ -70,6 +73,10 @@ def dashboard():
     pages = max(1, (len(grouped) + PAGE_SIZE - 1) // PAGE_SIZE)
     page = min(page, pages)
     summary = {
+        "identified": sum(row["kind"] == "identified" for row in grouped),
+        "unidentified": sum(row["kind"] == "unidentified" for row in grouped),
+        "pending": sum(row["kind"] == "pending" for row in grouped),
+        "technical": sum(row["kind"] == "technical" for row in grouped),
         "accesses": len(grouped), "active": sum(row["state"] == "active" for row in grouped),
         "ended": sum(row["state"] == "ended" for row in grouped),
         "devices": len({(row["ip"], row["mac"]) for row in grouped}),

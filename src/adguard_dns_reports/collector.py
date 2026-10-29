@@ -9,6 +9,7 @@ import requests
 from .classification import classify
 from .config import config
 from .database import db_connect, create_schema
+from .dns_evidence import remember_answers, prune
 def iso_timestamp(ts):
     """Convert timestamp to sortable UTC at 1 microsecond resolution."""
     try:
@@ -97,7 +98,7 @@ def collect(max_pages=500):
             if not data:
                 complete = True
                 break
-            rows = []
+            rows, answer_events = [], []
             oldest_time = None
             for entry in data:
                 ts = iso_timestamp(entry.get('time', ''))
@@ -110,11 +111,15 @@ def collect(max_pages=500):
                 row = row_from_api(entry, c)
                 if row:
                     rows.append(row)
+                    answer_events.append((entry, row))
             before = c.total_changes
             c.executemany('''INSERT OR IGNORE INTO queries
                   (uid,ts,ip,hostname,domain,service,category,qtype,status,blocked,reason)
                   VALUES (?,?,?,?,?,?,?,?,?,?,?)''', rows)
             total_added += c.total_changes - before
+            for entry, row in answer_events:
+                remember_answers(c, entry, row, int(now.timestamp()))
+            prune(c, int(now.timestamp()))
             c.commit()
             new_cursor = payload.get('oldest') or ''
             if not new_cursor or new_cursor == cursor or new_cursor in seen or (oldest_time and oldest_time < cutoff):
@@ -134,6 +139,7 @@ def collect(max_pages=500):
         ttl = int(settings.get('retention_days', 90))
         delete_before = (now - timedelta(days=ttl)).isoformat().replace('+00:00', 'Z')
         c.execute('DELETE FROM queries WHERE ts < ?', (delete_before,))
+        prune(c, int(now.timestamp()))
         # Refresh hostname information for existing devices whenever a PTR first becomes available.
         c.execute('''UPDATE queries SET hostname=(SELECT hostname FROM client_names WHERE ip=queries.ip)
                      WHERE ip IN (SELECT ip FROM client_names WHERE hostname != ip)

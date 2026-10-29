@@ -20,11 +20,15 @@ A prioridade para o destino é:
 
 1. Aplicação identificada pelo nDPI, como TLS.Netflix ou QUIC.YouTube.
    Prefixos de transporte são retirados para exibir Netflix ou YouTube.
-2. Nome de destino reportado pelo ntopng, quando disponível. Se uma regra
+2. Nome do próprio fluxo na API detalhada do ntopng, quando disponível.
+3. Correlação com resposta DNS do mesmo cliente/IP, dentro do TTL, como inferência.
+4. Nome de destino reportado pelo ntopng, quando disponível. Se uma regra
    conhecida relacionar esse domínio a um serviço, a identificação aparece
    explicitamente como inferência por domínio.
-3. IP e porta, com aplicação não identificada. Não se inventa um site a partir
-   apenas de um IP compartilhado ou de uma consulta DNS anterior.
+5. IP e porta, com aplicação não identificada. Vários domínios candidatos para
+   um IP mantêm a ambiguidade; uma pergunta DNS isolada não identifica o site.
+
+Detalhes, protocolos técnicos e diagnóstico: [IDENTIFICATION.md](IDENTIFICATION.md).
 
 Ao expandir o registro, aparecem nomes/IPs/portas e aplicações originais dos
 fluxos. Um nome reportado pelo ntopng pode ser de resolução de nomes; não é
@@ -111,7 +115,7 @@ possuem ações de edição da origem.
 
 ## Atualizar sem reinstalar
 
-A versão 1.3.0 mantém o instalador e --update ID_DO_CONTAINER. A migração adiciona
+A versão 1.4.0 mantém o instalador e --update ID_DO_CONTAINER. A migração adiciona
 colunas de acompanhamento à tabela de conexões existente. Configuração ntopng,
 credenciais, DNS, usuários e consultas anteriores permanecem.
 
@@ -122,8 +126,8 @@ exigir reconfigurar a integração existente.
 Antes do merge, para homologar a branch:
 
 ~~~bash
-REPORTS_REF=feat/access-sessions \
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/pedroandradev/dns-reports/feat/access-sessions/Instalar-DNS-Reports-Proxmox.sh)" reports --update ID_DO_CONTAINER
+REPORTS_REF=fix/destination-identification \
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/pedroandradev/dns-reports/fix/destination-identification/Instalar-DNS-Reports-Proxmox.sh)" reports --update ID_DO_CONTAINER
 ~~~
 
 Depois do merge, pode-se usar o mesmo comando público da main com --update.

@@ -69,3 +69,10 @@ traffic/access_exports.py mantém a semântica de estado/estimativa nos arquivos
 A consulta é somente de leitura. A integração continua restrita ao papel de
 administrador no gate de autenticação e no endpoint de configuração.
 Detalhes: [ACCESSES.md](ACCESSES.md).
+
+traffic/names.py valida hostnames e extrai somente o host de info da API
+detalhada, descartando caminhos e parâmetros. dns_evidence.py arquiva respostas
+A/AAAA recentes em dns_resolutions e correlaciona cliente/IP/TTL; não consulta
+nomes por dono do IP. A tabela é aditiva e limitada a 24h/100.000 respostas.
+traffic_connections recebe name_source e dns_candidates para manter evidência
+e ambiguidades por fluxo. Consulte [IDENTIFICATION.md](IDENTIFICATION.md).
