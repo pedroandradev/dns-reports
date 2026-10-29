@@ -35,6 +35,7 @@ def create_tables(conn):
         "access_evidence": "TEXT NOT NULL DEFAULT ''", "flow_state": "TEXT NOT NULL DEFAULT 'legacy'",
         "first_observed": "INTEGER", "last_checked": "INTEGER",
         "missing_since": "INTEGER", "missing_polls": "INTEGER NOT NULL DEFAULT 0",
+        "name_source": "TEXT NOT NULL DEFAULT ''", "dns_candidates": "TEXT NOT NULL DEFAULT '[]'",
     }
     for name, definition in additions.items():
         if name not in columns:

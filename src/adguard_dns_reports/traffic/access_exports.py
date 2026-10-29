@@ -18,7 +18,8 @@ from .views import human_time
 HEADERS = ["Computador", "IP", "MAC", "Unidade/setor", "Serviço/site", "Evidência",
            "Destinos reportados", "Início reportado pelo ntopng", "Última atividade",
            "Última presença na coleta", "Duração observada (segundos)", "Bytes dos fluxos retidos",
-           "Fluxos agrupados", "Estado", "Primeira ausência (fim estimado)", "Verificado em"]
+           "Fluxos agrupados", "Estado", "Primeira ausência (fim estimado)", "Verificado em",
+           "Tipo de identificação", "Observação", "Domínios DNS candidatos (inferência)"]
 
 
 def export_accesses(rows, fmt):
@@ -26,7 +27,8 @@ def export_accesses(rows, fmt):
                row["evidence"], ", ".join(row["destinations"]), human_time(row["started_at"]),
                human_time(row["last_activity"]), human_time(row["last_observed"]),
                row["duration"], row["bytes"], row["flow_count"], row["state_label"],
-               human_time(row["missing_since"]), human_time(row["checked_at"])] for row in rows]
+               human_time(row["missing_since"]), human_time(row["checked_at"]), row["kind"],
+               row["diagnostic"], ", ".join(row["dns_names"])] for row in rows]
     filename = "dns-reports-acessos-" + datetime.now(timezone.utc).strftime("%Y%m%d-%H%M") + "." + fmt
     if fmt == "csv":
         output = io.StringIO()
@@ -57,7 +59,8 @@ def export_accesses(rows, fmt):
             ending = "Última presença: " + human_time(row["last_observed"])
             if row["missing_since"]:
                 ending += "; ausente desde " + human_time(row["missing_since"])
-            data.append([row["hostname"] + " / " + row["ip"], row["service"], row["bytes"],
+            data.append([row["hostname"] + " / " + row["ip"], row["service"] + " | " + row["evidence"] +
+                         (" | " + row["diagnostic"] if row["diagnostic"] else ""), row["bytes"],
                          duration_label(row["duration"]), row["state_label"], ending])
         table = Table([[Paragraph(escape(str(cell)), styles["BodyText"]) for cell in row] for row in data],
                       repeatRows=1, colWidths=[155, 125, 75, 80, 120, 180])

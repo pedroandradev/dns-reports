@@ -18,6 +18,11 @@ O estado ativo é o observado na última coleta. O fim é estimado por ausência
 em coletas completas; falhas de coleta não confirmam encerramento. Veja
 [Acessos observados e seus horários](docs/ACCESSES.md).
 
+A identificação usa aplicação nDPI, nome no próprio fluxo e correlação explícita
+com respostas DNS do mesmo cliente/IP/TTL. Ambiguidades de CDN, classificação
+pendente e protocolos técnicos ficam visíveis, sem inventar um site.
+Veja [Identificação de destinos e diagnóstico](docs/IDENTIFICATION.md).
+
 ## Funcionalidades
 
 - Histórico DNS obtido por API, arquivado localmente em SQLite.

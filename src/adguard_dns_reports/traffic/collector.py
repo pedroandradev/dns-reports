@@ -11,6 +11,8 @@ from .client import NtopClient, NtopError
 from .settings import load_settings, local_name
 from .storage import counter, metadata
 from .access import observe, complete_snapshot
+from .names import reported_domain
+from ..dns_evidence import candidates, prune
 
 
 def number(value):
@@ -72,8 +74,10 @@ def flow_record(flow, settings, hosts, networks):
                sip, number(server["port"]), vlan, l4, first]
     key = hashlib.sha256(json.dumps(raw_key).encode()).hexdigest()
     uid = hashlib.sha256((settings["source"] + key).encode()).hexdigest()
+    hostname = reported_domain(flow.get("flow_hostname")) if c_local else ""
+    device = {**device, "name_source": "flow" if hostname else "reported"}
     return (key, uid, device, scope, app, first, last, total, rip,
-            text(remote.get("name")) or rip, number(remote["port"]), l4)
+            hostname or text(remote.get("name")) or rip, number(remote["port"]), l4)
 
 
 def collect(client=None, now=None):
@@ -150,12 +154,15 @@ def collect(client=None, now=None):
                 failures += 1
                 flow_complete = False
                 continue
-            observed_uids.add(observe(conn, record, settings["source"], now))
+            dns_names = candidates(conn, record) if settings.get("dns_enrichment", True) else []
+            observed_uids.add(observe(conn, record, settings["source"], now, dns_names))
             if scope == "internet":
                 # A single counter across application reclassification avoids a reset
                 # when nDPI changes e.g. TLS into TLS.Netflix.
                 counter(conn, settings["source"], key, "internet", "", now, str(first),
                         0, 0, total, {**device, "application": app})
+        prune(conn, now)
+        metadata(conn, "ntopng_flow_api", getattr(api, "flow_api", "custom"))
         if flow_complete:
             complete_snapshot(conn, settings["source"], now, observed_uids,
                               int(settings.get("session_idle_seconds", 120)))
