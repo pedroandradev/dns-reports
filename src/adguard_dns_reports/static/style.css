@@ -23,3 +23,6 @@
 .btn.danger{color:#ae3347;background:#fff3f5;border-color:#ffdce1}
 @media(max-width:750px){.user-row,.inline-user-form{width:100%}.inline-user-form input{flex:1}.export-top{justify-content:flex-start}.user-tag{display:none}}
 
+
+/* Traffic integration */
+.notice{background:#eef5ff;border:1px solid #cfdef2;color:#355473;font-size:13px;line-height:1.7}.coverage{margin-top:18px}.compact-stat{font-size:20px!important}.integration-form{max-width:760px}textarea{font:inherit;width:100%;padding:12px;border:1px solid #dce4ee;border-radius:7px;resize:vertical}.check-label{display:flex;align-items:center;gap:10px}.check-label input{width:18px;height:18px;margin:0}.integration-form .muted{margin:0 0 15px}@media(max-width:750px){.sidebar .nav{display:flex}.sidebar .aside-section{display:none}}

@@ -1,0 +1,11 @@
+[Unit]
+Description=DNS Reports - ntopng traffic measurements every 30 seconds
+
+[Timer]
+OnBootSec=45s
+OnUnitInactiveSec=30s
+Persistent=true
+Unit=dnsreports-ntopng.service
+
+[Install]
+WantedBy=timers.target

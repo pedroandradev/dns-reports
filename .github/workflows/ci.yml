@@ -2,7 +2,7 @@ name: Python tests and shell syntax
 
 on:
   push:
-    branches: [main, "refactor/**", "fix/**"]
+    branches: [main, "refactor/**", "fix/**", "feat/**"]
   pull_request:
 
 jobs:
@@ -15,7 +15,7 @@ jobs:
           python-version: "3.13"
       - name: Shell syntax
         run: |
-          for script in Instalar-DNS-Reports-Proxmox.sh scripts/proxmox/install.sh; do
+          for script in Instalar-DNS-Reports-Proxmox.sh scripts/proxmox/install.sh scripts/proxmox/lib/ui.sh; do
             bash -n "$script"
           done
       - name: Install Nginx for HTTPS integration tests

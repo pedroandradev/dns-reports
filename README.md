@@ -15,6 +15,21 @@ Painel web independente para **consultar, filtrar, classificar e exportar consul
 - Coleta programada a cada aproximadamente **2 minutos** e retenção local padrão de **90 dias**.
 - Painel HTTPS por Nginx, backend Flask/Gunicorn e certificado inicial autoassinado.
 
+## Consumo de rede com ntopng
+
+A integração opcional com **ntopng Community 6.6** acrescenta rankings por
+computador, aplicação e local, conexões observadas e exportação de medições.
+O AdGuard e o histórico DNS existente continuam disponíveis.
+
+Atualize o mesmo CT com o comando da seção de atualização e, usando o
+administrador existente, abra **Integração ntopng** no painel. Não é necessário
+reinstalar ou informar novamente a configuração do AdGuard.
+
+Consulte [Integração ntopng](docs/NTOPNG.md) para configuração, cobertura e
+retenção. O tráfego total LAN e a internet observada são apresentados em visões
+distintas: consultar fluxos ativos periodicamente não garante registrar todas
+as conexões nem medir todo o link.
+
 ## Requisitos
 
 - Host **Proxmox VE 8 ou 9**, acesso como `root` para instalar.
@@ -72,6 +87,8 @@ O assistente solicita:
 2. **Usuário e senha do AdGuard**.
 3. **Usuário e senha do administrador do painel** (senha com pelo menos 10 caracteres).
 
+O instalador mostra o título ASCII **DNS-REPORTS**, progresso em oito etapas e um indicador animado durante cada tarefa. A saída detalhada dos componentes fica em um log privado, cujo caminho é informado. Veja [Instalador e recuperação](docs/INSTALLER.md).
+
 As senhas são solicitadas sem eco no terminal. O bootstrap baixa o projeto completo e o instalador cria o próximo CTID disponível, instala os componentes, configura o coletor e apresenta a URL `https://IP_DO_LXC/`.
 
 **Aviso:** o certificado inicial é autoassinado. O navegador pode exibir aviso de segurança; configure um certificado confiável antes de uso mais amplo. Reserve o IP via DHCP para que o endereço permaneça estável.
@@ -96,7 +113,7 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/pedroandradev/dns-report
 | `REPORTS_TIMEZONE` | Fuso horário do Proxmox; fallback `Etc/UTC` |
 | `REPORTS_VPN_CIDRS` | Sem permissões VPN adicionais; lista de CIDRs IPv4 opcional |
 
-O instalador exige pelo menos 10 GiB disponíveis no storage escolhido. A criação falhará se o template, os storages ou a bridge não estiverem disponíveis.
+O LXC padrão utiliza disco de 8 GB. Reserve espaço conforme o volume de dados. A atualização exige espaço livre adicional para o backup da aplicação e do banco. A criação falhará se o template, os storages ou a bridge não estiverem disponíveis.
 
 ## Acesso e segurança
 
@@ -153,9 +170,11 @@ Após autenticar, selecione um período (1, 7, 30 ou 90 dias, ou intervalo de da
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/pedroandradev/dns-reports/main/Instalar-DNS-Reports-Proxmox.sh)" reports --update ID_DO_CONTAINER
 ```
 
+O instalador cria um backup consistente e versionado antes da implantação, aplica migrações aditivas e verifica a resposta HTTP do painel. Em falha, tenta recuperar a aplicação anterior. Consulte [Atualização e recuperação](docs/INSTALLER.md).
+
 Substitua `ID_DO_CONTAINER` pelo ID real, como `105`. Não use o comando de instalação nova para atualizar um container existente.
 
-Instalações anteriores com a antiga identidade visual podem migrar o painel sem recriar o LXC. Configurações locais preservadas incluem URL e credenciais do AdGuard. Na atualização, a retenção será ajustada para 90 dias.
+Instalações anteriores com a antiga identidade visual podem migrar o painel sem recriar o LXC. Configurações locais preservadas incluem URL e credenciais do AdGuard. A retenção já configurada é preservada. A integração ntopng fica desabilitada até ser configurada pelo administrador.
 
 ## Diagnóstico e manutenção
 
