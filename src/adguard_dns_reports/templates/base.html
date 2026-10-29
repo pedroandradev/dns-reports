@@ -1,0 +1,49 @@
+{% extends "document.html" %}
+{% from "_icons.html" import icon %}
+{% from "_theme_toggle.html" import theme_toggle %}
+{% set in_settings = request.path in ['/configuracoes', '/usuarios', '/integracoes/ntopng'] %}
+{% block body %}
+<a class="skip-link" href="#main-content">Ir para o conteúdo</a>
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand" href="{{ url_for('accesses.dashboard') }}" aria-label="DNS-REPORTS, início">
+      <div class="brand-mark">◈</div><div><strong>DNS-REPORTS</strong><small>Monitoramento de rede</small></div>
+    </a>
+    <div class="aside-section">RELATÓRIOS</div>
+    <nav class="report-nav" aria-label="Relatórios">
+      {% for endpoint,label,symbol,active in [
+        ('accesses.dashboard','Visualizador de Acesso','access',request.path in ['/', '/acessos']),
+        ('reports.dashboard','Consultas de DNS','dns',request.path == '/dns'),
+        ('traffic.dashboard','Consumo de rede','network',request.path == '/trafego')
+      ] %}
+      <a class="nav{% if active %} active{% endif %}" href="{{ url_for(endpoint) }}"{% if active %} aria-current="page"{% endif %}>{{ icon(symbol) }}<span>{{ label }}</span></a>
+      {% endfor %}
+    </nav>
+    <div class="sidebar-bottom"><span class="status-dot"></span> Histórico da rede
+      <div class="aside-note">Acessos observados, consultas DNS e medições de tráfego em relatórios separados.</div>
+    </div>
+  </aside>
+  <main class="main" id="main-content" tabindex="-1">
+    <header class="topbar">
+      <span class="topbar-title">DNS-REPORTS <span class="crumb">/ {% block crumb %}Relatórios{% endblock %}</span></span>
+      <div class="topbar-actions">
+        {{ theme_toggle() }}
+        {% if g.is_admin %}<a class="btn settings-link{% if in_settings %} active{% endif %}" href="{{ url_for('auth.settings') }}" aria-label="Configurações" title="Configurações"{% if request.path == '/configuracoes' %} aria-current="page"{% endif %}>{{ icon('settings') }}<span class="settings-label">Configurações</span></a>{% endif %}
+        <span class="user-tag">{{ username }}</span>
+        <form method="post" action="{{ url_for('auth.logout') }}"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn subtle" type="submit">Sair</button></form>
+      </div>
+    </header>
+    <div class="content">
+      {% if in_settings and g.is_admin %}
+      <nav class="settings-tabs" aria-label="Configurações">
+        {% for endpoint,label,path in [('auth.settings','Visão geral','/configuracoes'),('traffic.integration','Integração ntopng','/integracoes/ntopng'),('auth.usuarios','Usuários do painel','/usuarios')] %}
+        <a href="{{ url_for(endpoint) }}"{% if request.path == path %} class="active" aria-current="page"{% endif %}>{{ label }}</a>
+        {% endfor %}
+      </nav>
+      {% endif %}
+      {% block content %}{% endblock %}
+      <footer>{% block footer %}DNS-REPORTS · Histórico disponível a partir da coleta. A identificação de serviços depende das evidências observadas.{% endblock %}</footer>
+    </div>
+  </main>
+</div>
+{% endblock %}

@@ -18,7 +18,7 @@ O `dnsreports-collector.timer` invoca o comando `adguard-reports-collect` period
 - `src/adguard_dns_reports/config.py`: leitura da configuração privada.
 - `src/adguard_dns_reports/security.py`: CSRF, hash de senhas e cabeçalhos.
 - `src/adguard_dns_reports/templates/`: interface HTML/Jinja.
-- `src/adguard_dns_reports/static/`: CSS.
+- `src/adguard_dns_reports/static/`: CSS, JavaScript e favicon SVG.
 - `scripts/proxmox/`: provisionamento e unidades de sistema.
 - `tests/`: verificações estruturais e de comportamento.
 
@@ -76,3 +76,18 @@ A/AAAA recentes em dns_resolutions e correlaciona cliente/IP/TTL; não consulta
 nomes por dono do IP. A tabela é aditiva e limitada a 24h/100.000 respostas.
 traffic_connections recebe name_source e dns_candidates para manter evidência
 e ambiguidades por fluxo. Consulte [IDENTIFICATION.md](IDENTIFICATION.md).
+
+
+## Interface compartilhada
+
+document.html centraliza o documento e carrega theme.js antes dos estilos.
+base.html mantém um único menu de relatórios, o cabeçalho e as abas
+administrativas. Relatórios DNS, acessos, tráfego, usuários e integração
+estendem essa base; o antigo traffic_base.html foi substituído.
+A rota administrativa /configuracoes reúne as opções sem alterar os endpoints
+anteriores. _icons.html e _theme_toggle.html evitam repetir os controles.
+
+style.css usa tokens semânticos de cor para os temas claro e escuro; theme.js
+salva somente a preferência de aparência no navegador, sem mudar configuração
+ou sessão do servidor. Os arquivos são empacotados com a aplicação e respeitam
+a CSP existente. Detalhes: [INTERFACE.md](INTERFACE.md).

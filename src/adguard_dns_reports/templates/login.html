@@ -1,5 +1,19 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Entrar · Relatorios de Consultas DNS | AdGuard DNS Reports</title><link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}"></head>
-<body class="login-body"><main class="login-card"><div class="brand"><div class="brand-mark">◈</div><div><strong>AdGuard DNS Reports</strong><small>Relatorios de Consultas DNS</small></div></div><h1>Acesso ao painel</h1><p class="muted">Entre com suas credenciais para consultar o histórico de sua rede.</p>
-{% if error %}<p class="error">{{ error }}</p>{% endif %}
-<form method="post"><input type="hidden" name="csrf" value="{{csrf}}"><label for="username">Usuário</label><input autofocus id="username" name="username" autocomplete="username" required><label for="password">Senha</label><input id="password" type="password" name="password" autocomplete="current-password" required><button class="btn primary full">Entrar</button></form><p class="login-foot">AdGuard DNS Reports · Consulta de acessos de rede · ambiente interno</p></main></body></html>
-
+{% extends "document.html" %}
+{% from "_theme_toggle.html" import theme_toggle %}
+{% block title %}Entrar{% endblock %}
+{% block body_class %}login-body{% endblock %}
+{% block body %}
+<div class="login-theme">{{ theme_toggle() }}</div>
+<main class="login-card">
+  <div class="brand"><div class="brand-mark">◈</div><div><strong>DNS-REPORTS</strong><small>Monitoramento de rede</small></div></div>
+  <h1>Acesso ao painel</h1><p class="muted">Entre com suas credenciais para consultar o histórico de sua rede.</p>
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  <form method="post">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label for="username">Usuário</label><input autofocus id="username" name="username" autocomplete="username" required>
+    <label for="password">Senha</label><input id="password" type="password" name="password" autocomplete="current-password" required>
+    <button class="btn primary full">Entrar</button>
+  </form>
+  <p class="login-foot">DNS-REPORTS · Acesso aos relatórios da rede</p>
+</main>
+{% endblock %}

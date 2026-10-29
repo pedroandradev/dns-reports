@@ -1,5 +1,6 @@
-{% extends "traffic_base.html" %}
+{% extends "base.html" %}
 {% block title %}Integração ntopng{% endblock %}
+{% block crumb %}Configurações / Integração ntopng{% endblock %}
 {% block content %}
 <div class="pageheading"><div><div class="eyebrow">ADMINISTRAÇÃO</div><h1>Integração ntopng</h1><p class="muted">Configure a origem de tráfego sem alterar a conexão existente com o AdGuard.</p></div></div>
 {% if error %}<div class="error alert">{{ error }}</div>{% endif %}{% if success %}<div class="success alert">{{ success }}</div>{% endif %}
