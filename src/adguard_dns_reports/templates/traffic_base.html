@@ -5,9 +5,10 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"></head>
 <body><div class="shell">
 <aside class="sidebar">
-  <div class="brand"><div class="brand-mark">◈</div><div><strong>DNS-REPORTS</strong><small>DNS e consumo de rede</small></div></div>
+  <div class="brand"><div class="brand-mark">◈</div><div><strong>DNS-REPORTS</strong><small>Acessos e consultas DNS</small></div></div>
   <div class="aside-section">PAINEL</div>
-  <a class="nav" href="/">▦ <span>Consultas DNS</span></a>
+  <a class="nav {% if request.path in ['/', '/acessos'] %}active{% endif %}" href="/acessos">◎ <span>Quem está acessando</span></a>
+  <a class="nav" href="/dns">▦ <span>Consultas DNS</span></a>
   <a class="nav {% if request.path == '/trafego' %}active{% endif %}" href="/trafego">↔ <span>Consumo de rede</span></a>
   {% if g.is_admin %}
   <a class="nav {% if request.path == '/integracoes/ntopng' %}active{% endif %}" href="/integracoes/ntopng">⚙ <span>Integração ntopng</span></a>
@@ -17,7 +18,7 @@
     <div class="aside-note">Medições e conexões observadas. A classificação de aplicações pode ser incompleta.</div>
   </div>
 </aside>
-<main class="main"><div class="topbar"><span>DNS-REPORTS <span class="crumb">/ Consumo de rede</span></span>
+<main class="main"><div class="topbar"><span>DNS-REPORTS <span class="crumb">/ {% block crumb %}Consumo de rede{% endblock %}</span></span>
 <span class="user-tag">{{ username }}</span><form method="post" action="/logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn subtle">Sair ↗</button></form></div>
 <div class="content">{% block content %}{% endblock %}<footer>DNS-REPORTS · Valores decimais (1 GB = 1.000.000.000 bytes). Histórico disponível a partir da coleta.</footer></div>
-</main></div></body></html>
+</main></div>{% block scripts %}{% endblock %}</body></html>

@@ -11,6 +11,8 @@
 <label for="username">Usuário do ntopng</label><input id="username" name="username" value="{{ settings.username }}" maxlength="120" autocomplete="off">
 <label for="password">Senha do ntopng</label><input id="password" name="password" type="password" autocomplete="new-password" maxlength="1024" placeholder="{{ 'Senha salva — deixe vazio para manter' if has_password else 'Informe a senha' }}">
 <label for="ifid">Identificador da interface LAN no ntopng (ifid)</label><input id="ifid" name="ifid" type="number" min="0" max="1000000" value="{{ settings.ifid }}">
+<label for="session_idle_seconds">Confirmar ausência após (segundos)</label><input id="session_idle_seconds" name="session_idle_seconds" type="number" min="60" max="3600" value="{{ settings.get('session_idle_seconds',120) }}">
+<p class="muted">Conexões do mesmo equipamento e serviço próximas desse intervalo são agrupadas. Um encerramento é estimado somente após esse tempo sem aparecer e pelo menos duas coletas completas. Falha de coleta não confirma encerramento.</p>
 <label class="check-label"><input type="checkbox" name="verify_tls" {% if settings.verify_tls %}checked{% endif %}> Validar certificado HTTPS</label>
 <label for="local_networks">Redes internas (CIDRs, separados por espaço ou linha)</label><textarea id="local_networks" name="local_networks" rows="4" placeholder="10.20.0.0/16">{{ settings.local_networks }}</textarea>
 <p class="muted">Inclua todas as redes internas e de VPN corporativa para excluí-las da classificação de internet. Use uma única interface de captura para evitar duplicidade.</p>

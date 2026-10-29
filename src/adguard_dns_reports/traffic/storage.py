@@ -28,6 +28,20 @@ def create_tables(conn):
         CREATE INDEX IF NOT EXISTS idx_traffic_connections_time ON traffic_connections(observed_at);
     """)
 
+    # Existing observations remain historical; never mark them active during migration.
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(traffic_connections)")}
+    additions = {
+        "access_service": "TEXT NOT NULL DEFAULT ''", "access_key": "TEXT NOT NULL DEFAULT ''",
+        "access_evidence": "TEXT NOT NULL DEFAULT ''", "flow_state": "TEXT NOT NULL DEFAULT 'legacy'",
+        "first_observed": "INTEGER", "last_checked": "INTEGER",
+        "missing_since": "INTEGER", "missing_polls": "INTEGER NOT NULL DEFAULT 0",
+    }
+    for name, definition in additions.items():
+        if name not in columns:
+            conn.execute(f"ALTER TABLE traffic_connections ADD COLUMN {name} {definition}")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_access_state ON traffic_connections(source,flow_state)")
+
+
 
 def metadata(conn, key, value):
     conn.execute("INSERT INTO metadata(key,value) VALUES(?,?) "

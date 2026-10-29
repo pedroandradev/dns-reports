@@ -27,6 +27,8 @@ def auth_gate():
     g.is_admin = bool(user['is_admin'])
     if request.path == '/usuarios' and not g.is_admin:
         abort(403)
+    if request.path.startswith('/integracoes/') and not g.is_admin:
+        abort(403)
 
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
@@ -132,4 +134,3 @@ def logout():
     require_csrf()
     session.clear()
     return redirect('/login')
-

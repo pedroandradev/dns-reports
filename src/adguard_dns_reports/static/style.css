@@ -26,3 +26,19 @@
 
 /* Traffic integration */
 .notice{background:#eef5ff;border:1px solid #cfdef2;color:#355473;font-size:13px;line-height:1.7}.coverage{margin-top:18px}.compact-stat{font-size:20px!important}.integration-form{max-width:760px}textarea{font:inherit;width:100%;padding:12px;border:1px solid #dce4ee;border-radius:7px;resize:vertical}.check-label{display:flex;align-items:center;gap:10px}.check-label input{width:18px;height:18px;margin:0}.integration-form .muted{margin:0 0 15px}@media(max-width:750px){.sidebar .nav{display:flex}.sidebar .aside-section{display:none}}
+
+/* Primary access observations */
+.access-service strong{color:#244a77;font-size:14px}
+.access-service details{margin-top:10px;min-width:200px}
+.access-service summary{font-size:11px;color:#336ab4;cursor:pointer}
+.access-details{max-width:390px;max-height:370px;overflow:auto;margin-top:10px}
+.access-flow{font-size:11px;line-height:1.7;padding:9px 0;border-bottom:1px solid #e6ecf4;overflow-wrap:anywhere}
+.access-link{font-size:11px;color:#2269da;display:inline-block;margin-top:8px}
+.access-register td{vertical-align:top}
+.access-register td small{display:inline-block;color:#8493a7;font-size:10px;margin-top:6px}
+.access-register .pill{display:inline-block;white-space:normal;line-height:1.5;max-width:150px}
+.access-active{background:#e6f7f0;color:#238360}
+.access-pending{background:#fff5df;color:#956109}
+.access-ended{background:#eaf0f7;color:#49627d}
+.access-unknown,.access-paused,.access-legacy{background:#fff0e9;color:#985127}
+.pagination{display:flex;gap:15px;align-items:center;justify-content:space-between;margin-top:20px;font-size:12px;color:#71849c}

@@ -4,6 +4,20 @@ Painel web independente para **consultar, filtrar, classificar e exportar consul
 
 > **Escopo:** o painel analisa consultas DNS recebidas pelo AdGuard. Uma consulta a um domínio não comprova que uma pessoa navegou em determinada página, nem identifica de forma conclusiva o aplicativo utilizado. Não mostra URLs completas nem conteúdo HTTPS.
 
+## Quem está acessando o quê
+
+A página inicial prioriza **computador → serviço/site → tráfego → duração
+observada → estado da conexão**, com destinos detalhados e filtros por
+equipamento, aplicação e período. Conexões paralelas do mesmo serviço são
+agrupadas sem multiplicar sua duração. O consumo de banda permanece complementar.
+
+Somente o administrador configura ou testa o ntopng. As outras contas apenas
+consultam e exportam. A integração existente é preservada ao atualizar o CT.
+
+O estado ativo é o observado na última coleta. O fim é estimado por ausência
+em coletas completas; falhas de coleta não confirmam encerramento. Veja
+[Acessos observados e seus horários](docs/ACCESSES.md).
+
 ## Funcionalidades
 
 - Histórico DNS obtido por API, arquivado localmente em SQLite.
