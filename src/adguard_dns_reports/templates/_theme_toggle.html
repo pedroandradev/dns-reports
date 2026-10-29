@@ -1,0 +1,7 @@
+{% from "_icons.html" import icon %}
+{% macro theme_toggle() -%}
+<button type="button" class="btn theme-toggle" data-theme-toggle aria-label="Ativar tema escuro" aria-pressed="false" title="Ativar tema escuro">
+  <span class="theme-moon">{{ icon('moon') }}</span><span class="theme-sun">{{ icon('sun') }}</span>
+  <span data-theme-label>Tema escuro</span>
+</button>
+{%- endmacro %}

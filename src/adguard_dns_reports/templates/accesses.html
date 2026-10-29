@@ -1,9 +1,9 @@
-{% extends "traffic_base.html" %}
-{% block title %}Quem está acessando o quê{% endblock %}
-{% block crumb %}Acessos observados{% endblock %}
+{% extends "base.html" %}
+{% block title %}Visualizador de Acesso{% endblock %}
+{% block crumb %}Visualizador de Acesso{% endblock %}
 {% block content %}
 <div id="access-page" data-refresh="{{ '1' if selected.refresh else '0' }}">
-<div class="pageheading"><div><div class="eyebrow">ACESSOS OBSERVADOS</div><h1>Quem está acessando o quê</h1><p class="muted">Computador → serviço/site → tráfego → duração observada → estado da conexão.</p></div><div class="updated">Última coleta de fluxos<br><strong>{{ dt(meta.get('ntopng_flow_last_success')|int) }}</strong><br>Atualização automática: {{ '30 s' if selected.refresh else 'desligada' }}</div></div>
+<div class="pageheading"><div><div class="eyebrow">ACESSOS OBSERVADOS</div><h1>Visualizador de Acesso</h1><p class="muted">Quem está acessando o quê: computador → serviço/site → tráfego → duração observada → estado da conexão.</p></div><div class="updated">Última coleta de fluxos<br><strong>{{ dt(meta.get('ntopng_flow_last_success')|int) }}</strong><br>Atualização automática: {{ '30 s' if selected.refresh else 'desligada' }}</div></div>
 {% if not enabled %}<div class="alert notice">A integração está pausada. {% if g.is_admin %}<a href="/integracoes/ntopng">Configurar ntopng →</a>{% else %}A configuração é exclusiva do administrador.{% endif %}</div>{% endif %}
 {% if meta.get('ntopng_flow_error') %}<div class="error alert">{{ meta.ntopng_flow_error }}</div>{% endif %}
 {% if truncated %}<div class="alert notice">Este filtro encontrou mais de 10.000 fluxos. A lista é parcial: refine o computador ou o período. A exportação exige um filtro sem truncamento.</div>{% endif %}

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_theme_toggle.html" import theme_toggle %}
+{% block title %}Configurações{% endblock %}
+{% block crumb %}Configurações{% endblock %}
+{% block content %}
+<div class="pageheading"><div><div class="eyebrow">ADMINISTRAÇÃO</div><h1>Configurações</h1><p class="muted">Gerencie a integração de rede e o acesso ao painel em um só lugar.</p></div></div>
+<div class="settings-grid">
+  <a class="panel settings-card" href="{{ url_for('traffic.integration') }}">
+    <div class="settings-card-icon">{{ icon('network') }}</div><h2>Integração ntopng</h2>
+    <p>Configure a origem dos acessos e do consumo de rede, redes internas, locais e critérios de acompanhamento.</p><span class="access-link">Configurar integração →</span>
+  </a>
+  <a class="panel settings-card" href="{{ url_for('auth.usuarios') }}">
+    <div class="settings-card-icon">{{ icon('users') }}</div><h2>Usuários do painel</h2>
+    <p>Crie contas, redefina senhas e gerencie quem pode visualizar e exportar os relatórios.</p><span class="access-link">Gerenciar usuários →</span>
+  </a>
+</div>
+<section class="panel appearance-panel"><div><h2>Aparência</h2><p class="muted">Escolha o tema claro ou escuro. A preferência fica salva neste navegador e vale para todos os relatórios. Cada usuário também pode trocar o tema pelo botão no topo.</p></div>{{ theme_toggle() }}</section>
+{% endblock %}

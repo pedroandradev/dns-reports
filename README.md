@@ -23,6 +23,14 @@ com respostas DNS do mesmo cliente/IP/TTL. Ambiguidades de CDN, classificação
 pendente e protocolos técnicos ficam visíveis, sem inventar um site.
 Veja [Identificação de destinos e diagnóstico](docs/IDENTIFICATION.md).
 
+## Navegação e aparência
+
+O menu separa **Visualizador de Acesso**, **Consultas de DNS** e **Consumo de
+rede**, com a mesma interface em todas as páginas. A engrenagem de
+**Configurações** reúne integração ntopng e usuários, com acesso exclusivo do
+administrador. O botão de sol/lua troca o tema claro/escuro e mantém a escolha
+neste navegador. Consulte [Interface e navegação](docs/INTERFACE.md).
+
 ## Funcionalidades
 
 - Histórico DNS obtido por API, arquivado localmente em SQLite.

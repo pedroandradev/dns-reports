@@ -25,7 +25,7 @@ def auth_gate():
         return redirect(url_for('auth.login'))
     # Role is read from the database for every request, not trusted from session or UI.
     g.is_admin = bool(user['is_admin'])
-    if request.path == '/usuarios' and not g.is_admin:
+    if request.path in ('/usuarios', '/configuracoes') and not g.is_admin:
         abort(403)
     if request.path.startswith('/integracoes/') and not g.is_admin:
         abort(403)
@@ -62,6 +62,13 @@ def login():
             ATTEMPTS[ip] = history
             error = 'Usuário ou senha incorretos.'
     return render_template('login.html', error=error, csrf=token())
+
+
+@bp.get('/configuracoes')
+def settings():
+    if not getattr(g, 'is_admin', False):
+        abort(403)
+    return render_template('settings.html', csrf=token(), username=session.get('username', ''))
 
 
 @bp.route('/usuarios', methods=['GET', 'POST'])
