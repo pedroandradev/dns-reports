@@ -27,3 +27,13 @@ O `dnsreports-collector.timer` invoca o comando `adguard-reports-collect` period
 A implantação preserva `/opt/dnsreports/config.json` e `/opt/dnsreports/data/queries.sqlite3` e continua usando os mesmos nomes de serviços systemd. A partir desta versão o código é instalado como pacote Python; não é necessário manter os antigos `app.py` e `core.py` embutidos.
 
 A instalação nova requer DHCP e parâmetros de storage/bridge compatíveis. Para o primeiro uso de uma versão nova, faça backup e teste em um CT de homologação antes de atualizar produção.
+
+## Acesso VPN
+
+O modo `--configure-access CTID` do instalador chama
+`scripts/proxmox/configure_access.py` dentro do CT. Esse utilitário Python usa
+apenas a biblioteca padrão e não importa a aplicação nem lê credenciais.
+Ele mantém a ACL LAN do site, gerencia um snippet adicional de CIDRs VPN,
+faz backup e valida o Nginx antes da recarga, restaurando os arquivos em caso
+de falha. Atualizações sem `REPORTS_VPN_CIDRS` preservam a política existente.
+Detalhes de migração e rede: [VPN.md](VPN.md).

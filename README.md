@@ -94,6 +94,7 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/pedroandradev/dns-report
 | `REPORTS_STORAGE` | `local-lvm` |
 | `REPORTS_TEMPLATE_STORAGE` | `local` |
 | `REPORTS_TIMEZONE` | Fuso horário do Proxmox; fallback `Etc/UTC` |
+| `REPORTS_VPN_CIDRS` | Sem permissões VPN adicionais; lista de CIDRs IPv4 opcional |
 
 O instalador exige pelo menos 10 GiB disponíveis no storage escolhido. A criação falhará se o template, os storages ou a bridge não estiverem disponíveis.
 
@@ -107,6 +108,32 @@ O instalador exige pelo menos 10 GiB disponíveis no storage escolhido. A criaç
 - Nunca publique senhas, IPs internos reais, `config.json`, histórico, banco SQLite nem relatórios de usuários no repositório.
 
 > Se informações sensíveis já foram publicadas em commits antigos, removê-las dos arquivos atuais **não apaga o histórico do Git**. Faça rotação de credenciais expostas e considere reescrever o histórico com os procedimentos oficiais do GitHub.
+
+## Acesso pela VPN
+
+Configure explicitamente as sub-redes VPN que precisam acessar o IP interno do
+container. O comando abaixo altera apenas a ACL do Nginx de um CT existente,
+mantendo o acesso LAN, certificados, credenciais e dados:
+
+```bash
+REPORTS_VPN_CIDRS='100.96.20.0/24' \
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/pedroandradev/dns-reports/main/Instalar-DNS-Reports-Proxmox.sh)" reports --configure-access ID_DO_CONTAINER
+```
+
+O CIDR é um exemplo: substitua-o pela origem VPN efetivamente vista pelo Nginx.
+A variável também funciona na instalação e em `--update`. Em atualizações
+comuns, deixá-la ausente preserva a ACL; defini-la substitui a lista VPN
+gerenciada, e defini-la como vazia remove apenas essa lista adicional.
+As regras LAN anteriores permanecem.
+
+O configurador valida CIDRs IPv4, cria backups, testa o Nginx e restaura os
+arquivos se o teste ou a recarga falhar. Configurações Nginx customizadas que
+exijam interpretação da política são recusadas para revisão manual.
+
+Uma VPN RFC 1918 já é aceita pela ACL padrão. Se houver timeout, verifique
+rotas e firewall. O instalador não altera pfSense nem firewall Proxmox.
+Consulte [VPN: configuração, pfSense, diagnóstico e reversão](docs/VPN.md),
+incluindo como testar a branch da correção antes do merge.
 
 ## Consultas e exportação
 

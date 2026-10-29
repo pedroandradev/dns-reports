@@ -7,13 +7,41 @@ shift
 [[ -f "$ROOT/pyproject.toml" ]] || { echo "[ERRO] Codigo fonte incompleto." >&2; exit 1; }
 msg(){ printf '\n[*] %s\n' "$*"; }
 die(){ echo "[ERRO] $*" >&2; exit 1; }
-for cmd in pct pvesh pveam pvesm python3 openssl curl; do command -v "$cmd" >/dev/null || die "$cmd nao encontrado no Proxmox"; done
 MODE=install
-if [[ "${1:-}" == "--update" || "${1:-}" == "--upgrade" ]]; then
+if [[ "${1:-}" == "--update" || "${1:-}" == "--upgrade" || "${1:-}" == "--configure-access" ]]; then
+  [[ $# -eq 2 && "${2:-}" =~ ^[0-9]+$ ]] || die "Uso: --update CTID ou --configure-access CTID"
   MODE=update
-  CTID="${2:-}"
-  [[ "$CTID" =~ ^[0-9]+$ ]] || die "Uso: --update ID_DO_CT"
-elif [[ $# -ne 0 ]]; then die "Uso: sem argumentos (instalar) ou --update CTID"; fi
+  [[ "$1" == "--configure-access" ]] && MODE=access
+  CTID="$2"
+elif [[ $# -ne 0 ]]; then die "Uso: sem argumentos, --update CTID ou --configure-access CTID"; fi
+for cmd in pct python3; do command -v "$cmd" >/dev/null || die "$cmd nao encontrado no Proxmox"; done
+if [[ "$MODE" == access ]]; then
+  [[ "${REPORTS_VPN_CIDRS+x}" == x ]] || die "Defina REPORTS_VPN_CIDRS (vazio remove apenas as permissoes VPN gerenciadas)"
+fi
+# Validate before starting or changing a CT. An unset variable preserves its policy.
+if [[ "${REPORTS_VPN_CIDRS+x}" == x ]]; then
+  python3 "$ROOT/scripts/proxmox/configure_access.py" --validate --vpn-cidrs="$REPORTS_VPN_CIDRS" >/dev/null
+fi
+configure_access(){
+  # A unique temporary file avoids races between operators; flock serializes changes.
+  local helper_path result=0
+  helper_path="$(pct exec "$CTID" -- mktemp /tmp/dnsreports-access.XXXXXXXX.py)"
+  pct push "$CTID" "$ROOT/scripts/proxmox/configure_access.py" "$helper_path" || result=$?
+  if [[ "$result" -eq 0 ]]; then
+    pct exec "$CTID" -- flock /run/lock/dnsreports-access.lock python3 "$helper_path" \
+      --vpn-cidrs="${REPORTS_VPN_CIDRS:-}" "$@" || result=$?
+  fi
+  pct exec "$CTID" -- rm -f "$helper_path"
+  return "$result"
+}
+if [[ "$MODE" == access ]]; then
+  pct config "$CTID" >/dev/null || die "CT $CTID ausente"
+  [[ "$(pct status "$CTID")" == *running* ]] || die "Inicie o CT antes de configurar o acesso"
+  configure_access
+  msg "Acesso VPN configurado. Valide HTTPS pela VPN e LAN; veja docs/VPN.md."
+  exit 0
+fi
+for cmd in pvesh pveam pvesm openssl curl; do command -v "$cmd" >/dev/null || die "$cmd nao encontrado no Proxmox"; done
 STORAGE="${REPORTS_STORAGE:-local-lvm}"
 TEMPLATE_STORAGE="${REPORTS_TEMPLATE_STORAGE:-local}"
 BRIDGE="${REPORTS_BRIDGE:-vmbr0}"
@@ -154,6 +182,12 @@ else
   for unit in dnsreports.service dnsreports-collector.service dnsreports-collector.timer; do
     pct push "$CTID" "$ROOT/scripts/proxmox/systemd/$unit" "/etc/systemd/system/$unit"
   done
+fi
+# New installs get an empty/additive VPN snippet. Ordinary updates keep local Nginx.
+if [[ "$MODE" == install ]]; then
+  configure_access --no-reload
+elif [[ "${REPORTS_VPN_CIDRS+x}" == x ]]; then
+  configure_access
 fi
 msg "Reiniciando servicos"
 pct exec "$CTID" -- systemctl daemon-reload
