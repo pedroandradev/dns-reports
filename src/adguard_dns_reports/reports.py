@@ -74,7 +74,7 @@ def row_fields(row):
             row['qtype'], row['status'], 'Sim' if row['blocked'] else 'Não', row['reason']]
 
 
-@bp.get('/')
+@bp.get('/dns')
 def dashboard():
     where, values, period = filters()
     conn = db_connect()
@@ -163,5 +163,3 @@ def export(format_name):
 def healthz():
     # Health check still requires login for all other URLs. nginx can check locally.
     return Response('ok', mimetype='text/plain')
-
-

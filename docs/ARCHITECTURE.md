@@ -56,3 +56,16 @@ comuns não podem alterar a integração.
 
 Consulte [NTOPNG.md](NTOPNG.md) para semântica dos contadores e limites de cobertura
 e [INSTALLER.md](INSTALLER.md) para implantação e recuperação.
+
+## Acessos como visão principal
+
+traffic/access.py identifica o serviço/destino e acompanha presença/ausência
+somente em snapshots completos. Campos novos de traffic_connections são
+adicionados sem transformar dados legados em conexões ativas.
+traffic/access_views.py oferece a página inicial e /acessos, agrupando fluxos
+retidos por equipamento/serviço e calculando a união dos intervalos.
+traffic/access_exports.py mantém a semântica de estado/estimativa nos arquivos.
+
+A consulta é somente de leitura. A integração continua restrita ao papel de
+administrador no gate de autenticação e no endpoint de configuração.
+Detalhes: [ACCESSES.md](ACCESSES.md).

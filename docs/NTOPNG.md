@@ -1,9 +1,16 @@
-# ntopng: consumo por equipamento, aplicação e local
+# ntopng: acessos observados e consumo complementar
 
 O DNS-REPORTS mantém a integração atual com o AdGuard Home e adiciona uma fonte
 opcional de tráfego ntopng. A integração foi desenhada a partir das respostas
 REST v2 do ntopng 6.6 Community. Não requer reinstalar o container ou trocar a
 licença para consultar os endpoints usados aqui.
+
+## Visão principal de acessos
+
+A versão 1.3.0 prioriza computador, serviço/site, tráfego, duração e estado em
+/acessos e na página inicial. A consulta DNS permanece em /dns; os rankings de
+banda seguem em /trafego. Consulte [ACCESSES.md](ACCESSES.md) para agrupamento,
+identificação do destino, ativo/encerrado estimado e permissões.
 
 ## Atualizar uma instalação existente
 
@@ -16,8 +23,8 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/pedroandradev/dns-report
 A versão deve estar integrada à main. Para homologar a branch desta alteração:
 
 ~~~bash
-REPORTS_REF=feat/ntopng-traffic-installer \
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/pedroandradev/dns-reports/feat/ntopng-traffic-installer/Instalar-DNS-Reports-Proxmox.sh)" reports --update ID_DO_CONTAINER
+REPORTS_REF=feat/access-sessions \
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/pedroandradev/dns-reports/feat/access-sessions/Instalar-DNS-Reports-Proxmox.sh)" reports --update ID_DO_CONTAINER
 ~~~
 
 O comando não cria outro CT e não solicita novamente as credenciais do AdGuard

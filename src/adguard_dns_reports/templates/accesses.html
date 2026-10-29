@@ -1,0 +1,42 @@
+{% extends "traffic_base.html" %}
+{% block title %}Quem está acessando o quê{% endblock %}
+{% block crumb %}Acessos observados{% endblock %}
+{% block content %}
+<div id="access-page" data-refresh="{{ '1' if selected.refresh else '0' }}">
+<div class="pageheading"><div><div class="eyebrow">ACESSOS OBSERVADOS</div><h1>Quem está acessando o quê</h1><p class="muted">Computador → serviço/site → tráfego → duração observada → estado da conexão.</p></div><div class="updated">Última coleta de fluxos<br><strong>{{ dt(meta.get('ntopng_flow_last_success')|int) }}</strong><br>Atualização automática: {{ '30 s' if selected.refresh else 'desligada' }}</div></div>
+{% if not enabled %}<div class="alert notice">A integração está pausada. {% if g.is_admin %}<a href="/integracoes/ntopng">Configurar ntopng →</a>{% else %}A configuração é exclusiva do administrador.{% endif %}</div>{% endif %}
+{% if meta.get('ntopng_flow_error') %}<div class="error alert">{{ meta.ntopng_flow_error }}</div>{% endif %}
+{% if truncated %}<div class="alert notice">Este filtro encontrou mais de 10.000 fluxos. A lista é parcial: refine o computador ou o período. A exportação exige um filtro sem truncamento.</div>{% endif %}
+<form class="filters" method="get" id="access-filters">
+<div class="filter-group"><label for="computer">Computador, IP ou MAC</label><input id="computer" name="computer" value="{{ selected.computer }}" placeholder="Nome do computador ou IP"></div>
+<div class="filter-group"><label for="application">Serviço/site ou destino</label><input id="application" name="application" value="{{ selected.application }}" placeholder="Netflix, Teams ou exemplo.com"></div>
+<div class="filter-group"><label for="state">Conexão</label><select id="state" name="state">{% for value,label in [('all','Todos os estados'),('active','Ativa na última coleta'),('pending','Aguardando confirmação'),('ended','Encerrada (estimativa)'),('unknown','Sem confirmação / pausados')] %}<option value="{{ value }}" {% if selected.state == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+<div class="filter-group"><label for="period">Período</label><select name="period" id="period">{% for days in [1,7,30,90] %}<option value="{{ days }}" {% if selected.period == days %}selected{% endif %}>Últimos {{ days }} dias</option>{% endfor %}</select></div>
+<div class="filter-group"><label for="scope">Destinos</label><select name="scope" id="scope"><option value="internet">Internet</option><option value="lan" {% if selected.scope == 'lan' %}selected{% endif %}>Todos os observados</option></select></div>
+<div class="filter-group"><label for="location">Unidade/setor</label><select name="location" id="location"><option value="">Todos</option>{% for location in locations %}<option {% if selected.location == location %}selected{% endif %}>{{ location }}</option>{% endfor %}</select></div>
+<div class="filter-group"><label for="refresh">Atualização automática</label><select name="refresh" id="refresh"><option value="1" {% if selected.refresh %}selected{% endif %}>A cada 30 segundos</option><option value="0" {% if not selected.refresh %}selected{% endif %}>Desligada</option></select></div>
+<div class="date-options"><div><label for="start">Início</label><input type="date" id="start" name="start" value="{{ args.get('start','') }}"></div><div><label for="end">Fim</label><input type="date" id="end" name="end" value="{{ args.get('end','') }}"></div></div>
+<div class="actions"><button class="btn primary">Consultar</button><a class="btn subtle" href="/acessos">Limpar</a>{% for format in ['csv','xlsx','pdf'] %}<a class="btn outline" href="{{ url_for('accesses.export',format_name=format) }}?{{ request.query_string.decode() }}">↓ {{ format.upper() }}</a>{% endfor %}</div>
+</form>
+<p class="muted">CSV/Excel exportam os agrupamentos do filtro sem truncamento; PDF limitado a 1.000 acessos.</p>
+<div class="stats"><div class="stat"><div class="stat-label">Acessos agrupados</div><strong>{{ summary.accesses }}</strong><small>No conjunto de fluxos retidos do filtro</small></div><div class="stat"><div class="stat-label">Ativos na última coleta</div><strong>{{ summary.active }}</strong><small>Estado sujeito à atualização da origem</small></div><div class="stat"><div class="stat-label">Computadores</div><strong>{{ summary.devices }}</strong><small>Identificação reportada pelo ntopng</small></div><div class="stat"><div class="stat-label">Encerrados (estimativa)</div><strong>{{ summary.ended }}</strong><small>Ausência confirmada em coletas completas</small></div></div>
+<section class="panel access-register"><div class="panel-head"><div><h2>Computadores e serviços acessados</h2><p>Conexões próximas do mesmo equipamento e serviço são agrupadas. O volume é informação complementar. Retenção: {{ meta.get('ntopng_connection_days',7) }} dias, até {{ meta.get('ntopng_connection_limit',100000) }} fluxos.</p></div></div>
+<div class="table-scroll"><table><thead><tr><th>Computador</th><th>Serviço/site e destino</th><th>Tráfego observado</th><th>Duração dos fluxos</th><th>Estado</th><th>Horários</th></tr></thead><tbody>
+{% for access in accesses %}
+<tr><td class="hostname">{{ access.hostname }}<div class="muted mono">{{ access.ip }}</div>{% if access.location != "Sem local" %}<div class="muted">{{ access.location }}</div>{% endif %}<a class="access-link" href="/dns?client={{ access.ip|urlencode }}">Consultas DNS →</a></td>
+<td class="access-service"><strong>{{ access.service }}</strong><div class="muted">{{ access.evidence }}</div>
+<details><summary>{{ access.flow_count }} fluxo(s) · ver destinos</summary>
+<div class="access-details">{% for flow in access.flows[:12] %}<div class="access-flow"><b>{{ flow.remote_name }}</b><br><span class="mono">{{ flow.remote_ip }}:{{ flow.remote_port }}</span> · {{ flow.application }}<br>{{ dt(flow.first_seen) }} → {{ dt(flow.last_seen) }} · {{ fmt(flow.bytes_seen) }}</div>{% endfor %}{% if access.flow_count > 12 %}<p>Mostrando 12 de {{ access.flow_count }} fluxos agrupados.</p>{% endif %}</div></details></td>
+<td class="nowrap">{{ fmt(access.bytes) }}<div class="muted">Fluxos retidos, ambos os sentidos</div></td>
+<td class="nowrap">{{ duration(access.duration) }}<div class="muted">Sem somar intervalos paralelos</div></td>
+<td><span class="pill access-{{ access.state }}">{{ access.state_label }}</span></td>
+<td class="nowrap"><small>Início reportado</small><br>{{ dt(access.started_at) }}<br><small>Última atividade</small><br>{{ dt(access.last_activity) }}<br>
+{% if access.state == 'ended' %}<small>Deixou de aparecer entre</small><br>{{ dt(access.last_observed) }}<br>e {{ dt(access.missing_since) }}<br><small>Ausência verificada em {{ dt(access.checked_at) }}</small>{% else %}<small>Última presença na coleta</small><br>{{ dt(access.last_observed) }}{% endif %}</td></tr>
+{% else %}<tr><td class="empty" colspan="6">Nenhum acesso observado neste filtro. {% if g.is_admin and not enabled %}<a href="/integracoes/ntopng">Configure a integração ntopng.</a>{% endif %}</td></tr>{% endfor %}
+</tbody></table></div>
+<div class="pagination"><span>Página {{ page }} de {{ pages }} · {{ summary.accesses }} acesso(s)</span><div class="actions">{% if page>1 %}<a class="btn outline" href="{{ page_url(page-1) }}">← Anterior</a>{% endif %}{% if page<pages %}<a class="btn outline" href="{{ page_url(page+1) }}">Próxima →</a>{% endif %}</div></div>
+</section>
+<div class="alert notice">“Ativa” indica presença na lista do ntopng na última coleta, não confirmação de uso humano ou de uma sessão TCP neste instante. O encerramento é estimado por ausência; uma falha de coleta não encerra acessos. Duração é a união dos intervalos dos fluxos reportados, não tempo assistindo ou usando a tela. Bytes são acumulados dos fluxos retidos e podem incluir trechos anteriores ao período selecionado.</div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static',filename='accesses.js') }}" defer></script>{% endblock %}

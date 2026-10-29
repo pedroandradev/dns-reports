@@ -10,6 +10,7 @@ from ..database import create_schema, db_connect
 from .client import NtopClient, NtopError
 from .settings import load_settings, local_name
 from .storage import counter, metadata
+from .access import observe, complete_snapshot
 
 
 def number(value):
@@ -76,6 +77,7 @@ def flow_record(flow, settings, hosts, networks):
 
 
 def collect(client=None, now=None):
+    use_clock = now is None
     now = int(time.time()) if now is None else now
     conn = db_connect()
     create_schema(conn)
@@ -119,6 +121,8 @@ def collect(client=None, now=None):
             flow_data = api.flows()
         except NtopError:
             failures += 1
+        if use_clock:
+            now = int(time.time())
         # Configuration may have changed while network requests were in progress.
         conn.execute("BEGIN IMMEDIATE")
         current = load_settings(conn)
@@ -134,6 +138,8 @@ def collect(client=None, now=None):
                 for app, value in apps:
                     counter(conn, settings["source"], key, "lan_app", app, now, generation,
                             0, 0, value, device)
+        observed_uids = set()
+        flow_complete = flow_data is not None
         for flow in flow_data or []:
             try:
                 record = flow_record(flow, settings, devices, networks)
@@ -142,22 +148,21 @@ def collect(client=None, now=None):
                 key, uid, device, scope, app, first, last, total, rip, name, port, l4 = record
             except (ValueError, KeyError, TypeError, OverflowError):
                 failures += 1
+                flow_complete = False
                 continue
-            conn.execute("""INSERT INTO traffic_connections
-                (uid,source,first_seen,last_seen,observed_at,ip,mac,hostname,vlan,location,
-                 remote_ip,remote_name,remote_port,protocol,application,bytes_seen,scope)
-                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                ON CONFLICT(uid) DO UPDATE SET last_seen=MAX(last_seen,excluded.last_seen),
-                observed_at=excluded.observed_at,application=excluded.application,
-                bytes_seen=MAX(bytes_seen,excluded.bytes_seen),remote_name=excluded.remote_name""",
-                (uid, settings["source"], first, last, now, device["ip"], device["mac"],
-                 device["hostname"], device["vlan"], device["location"], rip, name, port,
-                 l4, app, total, scope))
+            observed_uids.add(observe(conn, record, settings["source"], now))
             if scope == "internet":
                 # A single counter across application reclassification avoids a reset
                 # when nDPI changes e.g. TLS into TLS.Netflix.
                 counter(conn, settings["source"], key, "internet", "", now, str(first),
                         0, 0, total, {**device, "application": app})
+        if flow_complete:
+            complete_snapshot(conn, settings["source"], now, observed_uids,
+                              int(settings.get("session_idle_seconds", 120)))
+            metadata(conn, "ntopng_flow_last_success", now)
+            metadata(conn, "ntopng_flow_error", "")
+        else:
+            metadata(conn, "ntopng_flow_error", "Coleta de fluxos incompleta ou indisponível.")
         ttl = max(1, min(int(config().get("retention_days", 90)), 3660))
         cutoff = now - ttl * 86400
         conn.execute("DELETE FROM traffic_usage WHERE sample_end < ?", (cutoff,))
@@ -182,6 +187,7 @@ def collect(client=None, now=None):
         return {"hosts": len(host_data), "flows": len(flow_data or []), "failures": failures}
     except NtopError as error:
         conn.rollback()
+        metadata(conn, "ntopng_flow_error", "Coleta indisponível; estado das conexões sem confirmação.")
         metadata(conn, "ntopng_status", "erro")
         metadata(conn, "ntopng_error", str(error))
         conn.commit()

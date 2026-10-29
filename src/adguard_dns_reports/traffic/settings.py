@@ -6,7 +6,7 @@ from urllib.parse import urlsplit
 
 DEFAULTS = {"enabled": False, "url": "", "username": "", "password": "",
             "ifid": 0, "verify_tls": True, "local_networks": [], "locations": [],
-            "source": "", "revision": ""}
+            "source": "", "revision": "", "session_idle_seconds": 120}
 
 
 def load_settings(conn):
@@ -61,10 +61,13 @@ def validate(form, previous):
     password = supplied_password or previous["password"]
     try:
         ifid = int(form.get("ifid", "0"))
+        idle = int(form.get("session_idle_seconds", previous.get("session_idle_seconds", 120)))
         parts = urlsplit(url)
         _ = parts.port
     except ValueError:
         raise ValueError("URL ou identificador de interface inválido.") from None
+    if not 60 <= idle <= 3600:
+        raise ValueError("A confirmação de ausência deve ser entre 60 e 3.600 segundos.")
     if not 0 <= ifid <= 1000000:
         raise ValueError("Interface inválida.")
     if url and (parts.scheme not in ("http", "https") or not parts.hostname
@@ -78,7 +81,7 @@ def validate(form, previous):
     if enabled and not (url and username and password and local):
         raise ValueError("Para habilitar, informe URL, usuário, senha e redes internas.")
     settings = {**previous, "enabled": enabled, "url": url, "username": username,
-                "password": password, "ifid": ifid,
+                "password": password, "ifid": ifid, "session_idle_seconds": idle,
                 "verify_tls": form.get("verify_tls") == "on",
                 "local_networks": local, "locations": locations, "revision": uuid.uuid4().hex}
     # A new source prevents comparisons across appliances, interfaces or network policies.
