@@ -12,8 +12,10 @@ def create_app():
     from .security import security_headers
     from .auth import bp as auth_bp, auth_gate
     from .reports import bp as reports_bp
+    from .traffic.views import bp as traffic_bp
     app.before_request(auth_gate)
     app.after_request(security_headers)
     app.register_blueprint(auth_bp)
     app.register_blueprint(reports_bp)
+    app.register_blueprint(traffic_bp)
     return app

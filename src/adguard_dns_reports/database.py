@@ -43,6 +43,8 @@ def create_schema(c):
         last_checked INTEGER NOT NULL
       );
     ''')
+    from .traffic.storage import create_tables
+    create_tables(c)
     # Safe, additive SQLite migration for existing multi-user installations.
     columns = {r['name'] for r in c.execute('PRAGMA table_info(users)').fetchall()}
     if 'is_admin' not in columns:
@@ -64,4 +66,3 @@ def create_schema(c):
                   (admin_username,))
         c.execute("INSERT INTO metadata(key,value) VALUES('admin_role_migrated_v1','true')")
     c.commit()
-

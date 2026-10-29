@@ -1,0 +1,22 @@
+{% extends "traffic_base.html" %}
+{% block title %}Integração ntopng{% endblock %}
+{% block content %}
+<div class="pageheading"><div><div class="eyebrow">ADMINISTRAÇÃO</div><h1>Integração ntopng</h1><p class="muted">Configure a origem de tráfego sem alterar a conexão existente com o AdGuard.</p></div></div>
+{% if error %}<div class="error alert">{{ error }}</div>{% endif %}{% if success %}<div class="success alert">{{ success }}</div>{% endif %}
+<section class="panel"><form method="post" class="user-form integration-form">
+<input type="hidden" name="csrf" value="{{ csrf }}">
+<label class="check-label"><input type="checkbox" name="enabled" {% if settings.enabled %}checked{% endif %}> Habilitar coleta ntopng</label>
+<label for="url">URL acessível a partir deste container</label><input id="url" name="url" value="{{ settings.url }}" placeholder="https://ntopng.exemplo.local:3001" maxlength="500">
+<p class="muted">Use HTTPS ou um túnel protegido. HTTP transmite as credenciais e os dados sem criptografia. 127.0.0.1 aponta para este container, não para o firewall.</p>
+<label for="username">Usuário do ntopng</label><input id="username" name="username" value="{{ settings.username }}" maxlength="120" autocomplete="off">
+<label for="password">Senha do ntopng</label><input id="password" name="password" type="password" autocomplete="new-password" maxlength="1024" placeholder="{{ 'Senha salva — deixe vazio para manter' if has_password else 'Informe a senha' }}">
+<label for="ifid">Identificador da interface LAN no ntopng (ifid)</label><input id="ifid" name="ifid" type="number" min="0" max="1000000" value="{{ settings.ifid }}">
+<label class="check-label"><input type="checkbox" name="verify_tls" {% if settings.verify_tls %}checked{% endif %}> Validar certificado HTTPS</label>
+<label for="local_networks">Redes internas (CIDRs, separados por espaço ou linha)</label><textarea id="local_networks" name="local_networks" rows="4" placeholder="10.20.0.0/16">{{ settings.local_networks }}</textarea>
+<p class="muted">Inclua todas as redes internas e de VPN corporativa para excluí-las da classificação de internet. Use uma única interface de captura para evitar duplicidade.</p>
+<label for="locations">Locais (opcional): Nome = CIDR, CIDR</label><textarea id="locations" name="locations" rows="5" placeholder="Unidade A = 10.20.1.0/24&#10;Unidade B = 10.20.2.0/24">{{ settings.locations }}</textarea>
+<p class="muted">A rede mais específica determina o local. Sem correspondência, o equipamento aparece como “Sem local”. Os nomes históricos permanecem como registrados na coleta.</p>
+<div class="actions"><button class="btn primary" name="action" value="save">Salvar configuração</button><button class="btn outline" name="action" value="test">Testar e salvar</button><a class="btn subtle" href="/trafego">Ver consumo</a></div>
+</form></section>
+<div class="alert notice">As credenciais ficam no banco privado do container. A configuração do AdGuard, os usuários e os dados DNS existentes são preservados. A coleta começa criando uma base de contadores; não importa consumo anterior.</div>
+{% endblock %}

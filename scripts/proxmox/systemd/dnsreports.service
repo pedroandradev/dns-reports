@@ -7,6 +7,8 @@ After=network-online.target
 Type=simple
 User=dnsreports
 Group=dnsreports
+UMask=0027
+Environment=REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
 WorkingDirectory=/opt/dnsreports
 ExecStart=/opt/dnsreports/venv/bin/gunicorn --workers 2 --threads 2 --bind 127.0.0.1:8088 --timeout 120 adguard_dns_reports.wsgi:app
 Restart=always

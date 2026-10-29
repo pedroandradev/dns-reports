@@ -1,0 +1,18 @@
+[Unit]
+Description=DNS Reports - ntopng traffic collector
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=dnsreports
+Group=dnsreports
+UMask=0027
+Environment=REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+WorkingDirectory=/opt/dnsreports
+ExecStart=/opt/dnsreports/venv/bin/dnsreports-ntopng-collect
+TimeoutStartSec=180
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/dnsreports/data
+PrivateTmp=true

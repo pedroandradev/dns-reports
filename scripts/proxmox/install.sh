@@ -41,21 +41,79 @@ if [[ "$MODE" == access ]]; then
   msg "Acesso VPN configurado. Valide HTTPS pela VPN e LAN; veja docs/VPN.md."
   exit 0
 fi
-for cmd in pvesh pveam pvesm openssl curl; do command -v "$cmd" >/dev/null || die "$cmd nao encontrado no Proxmox"; done
+source "$ROOT/scripts/proxmox/lib/ui.sh"
+ui_init 8
+if [[ "$MODE" == update ]]; then ui_banner "Atualizando container existente $CTID"; else ui_banner "Instalando container LXC"; fi
+APPDIR=/opt/dnsreports
+UPDATE_STOPPED=0
+BACKUP_DIR=
+UPGRADE_HELPER=
+UNITS=(dnsreports.service dnsreports-collector.service dnsreports-collector.timer dnsreports-ntopng.service dnsreports-ntopng.timer)
+cleanup(){
+  ui_cleanup
+  [[ -z "${UI_PID:-}" ]] || { kill "$UI_PID" 2>/dev/null || true; wait "$UI_PID" 2>/dev/null || true; }
+  rm -f "$ROOT/.adguard-config-tmp.json" "$ROOT/.adguard-source-tmp.tar.gz" "$ROOT/.adguard-openssl-tmp.cnf" "$ROOT/.adguard-ip-tmp"
+  if [[ -n "$UPGRADE_HELPER" ]]; then pct exec "$CTID" -- rm -f "$UPGRADE_HELPER" >> "$REPORTS_INSTALL_LOG" 2>&1 || true; fi
+}
+recover_update(){
+  pct exec "$CTID" -- systemctl stop dnsreports.service dnsreports-collector.timer dnsreports-collector.service >> "$REPORTS_INSTALL_LOG" 2>&1 || true
+  pct exec "$CTID" -- systemctl disable --now dnsreports-ntopng.timer >> "$REPORTS_INSTALL_LOG" 2>&1 || true
+  pct exec "$CTID" -- systemctl stop dnsreports-ntopng.service >> "$REPORTS_INSTALL_LOG" 2>&1 || true
+  if pct exec "$CTID" -- test -f "$BACKUP_DIR/manifest.json"; then
+    pct exec "$CTID" -- python3 "$UPGRADE_HELPER" restore "$BACKUP_DIR" >> "$REPORTS_INSTALL_LOG" 2>&1 || return 1
+  fi
+  pct exec "$CTID" -- systemctl daemon-reload >> "$REPORTS_INSTALL_LOG" 2>&1 || return 1
+  pct exec "$CTID" -- systemctl restart dnsreports.service >> "$REPORTS_INSTALL_LOG" 2>&1 || return 1
+  pct exec "$CTID" -- systemctl enable --now dnsreports-collector.timer >> "$REPORTS_INSTALL_LOG" 2>&1 || return 1
+  if pct exec "$CTID" -- test -f /etc/systemd/system/dnsreports-ntopng.timer; then
+    pct exec "$CTID" -- systemctl enable --now dnsreports-ntopng.timer >> "$REPORTS_INSTALL_LOG" 2>&1 || return 1
+  fi
+  pct exec "$CTID" -- curl --fail --silent --show-error --connect-timeout 2 --max-time 3 \
+    --retry 15 --retry-connrefused --retry-delay 1 http://127.0.0.1:8088/login -o /dev/null >> "$REPORTS_INSTALL_LOG" 2>&1 || return 1
+  pct exec "$CTID" -- systemctl is-active --quiet dnsreports.service >> "$REPORTS_INSTALL_LOG" 2>&1
+}
+on_failure(){
+  local status="$1"
+  trap - ERR
+  if [[ -n "${UI_PID:-}" ]]; then
+    printf '\n  Aguardando a tarefa em andamento para recuperar com seguranca...\n' >&2
+    wait "$UI_PID" 2>/dev/null || true
+    UI_PID=
+  fi
+  ui_cleanup
+  printf '\n  [ERRO] Falha na etapa %s: %s\n  Log: %s\n' "$UI_STEP" "$UI_LABEL" "$REPORTS_INSTALL_LOG" >&2
+  if [[ "$MODE" == update && "$UPDATE_STOPPED" == 1 ]]; then
+    printf '  Recuperando a aplicacao anterior...\n' >&2
+    if recover_update; then
+      printf '  Aplicacao anterior reiniciada. Confira o painel. Backup: %s\n' "$BACKUP_DIR" >&2
+    else
+      printf '  Recuperacao requer intervencao. Backup: %s | veja o log.\n' "$BACKUP_DIR" >&2
+    fi
+  fi
+  exit "$status"
+}
+trap cleanup EXIT
+trap 'on_failure "$?"' ERR
+trap 'on_failure 130' INT
+trap 'on_failure 143' TERM
+
+ui_stage "Validacao e configuracao"
+for cmd in pvesh pveam pvesm openssl curl tar; do command -v "$cmd" >/dev/null || die "$cmd nao encontrado no Proxmox"; done
 STORAGE="${REPORTS_STORAGE:-local-lvm}"
 TEMPLATE_STORAGE="${REPORTS_TEMPLATE_STORAGE:-local}"
 BRIDGE="${REPORTS_BRIDGE:-vmbr0}"
 TZ_NAME="${REPORTS_TIMEZONE:-$(timedatectl show -p Timezone --value 2>/dev/null || true)}"
 TZ_NAME="${TZ_NAME:-Etc/UTC}"
-[[ -f "/usr/share/zoneinfo/$TZ_NAME" ]] || die "Fuso horario invalido: $TZ_NAME"
-APPDIR=/opt/dnsreports
+if [[ "$MODE" == install ]]; then
+  [[ -f "/usr/share/zoneinfo/$TZ_NAME" ]] || die "Fuso horario invalido: $TZ_NAME"
+fi
 if [[ "$MODE" == install ]]; then
   CTID="$(pvesh get /cluster/nextid | tr -dc '0-9')"
   [[ "$CTID" =~ ^[0-9]+$ ]] || die "Falha ao obter CTID"
-  ip -o link show "$BRIDGE" >/dev/null || die "Bridge $BRIDGE ausente"
+  ip -o link show "$BRIDGE" >> "$REPORTS_INSTALL_LOG" 2>&1 || die "Bridge $BRIDGE ausente"
   pvesm status | awk 'NR>1{print $1}' | grep -Fxq "$STORAGE" || die "Storage $STORAGE ausente"
   pvesm status | awk 'NR>1{print $1}' | grep -Fxq "$TEMPLATE_STORAGE" || die "Storage de templates $TEMPLATE_STORAGE ausente"
-  printf '\nAdGuard DNS Reports | Debian 13 | DHCP | 2 vCPU | 1 GB RAM | 8 GB | 90 dias\n'
+  printf '  Debian 13 | DHCP | 2 vCPU | 1 GB RAM | 8 GB | CT %s\n\n' "$CTID"
   read -r -p 'URL do AdGuard Home (http(s)://IP:PORTA): ' ADGUARD_URL
   ADGUARD_URL="${ADGUARD_URL%/}"
   [[ "$ADGUARD_URL" =~ ^https?://[^[:space:]@]+$ ]] || die "URL invalida"
@@ -69,93 +127,117 @@ if [[ "$MODE" == install ]]; then
   read -r -s -p 'Senha do administrador (10+ caracteres): ' PANEL_PASS; printf '\n'
   [[ ${#PANEL_PASS} -ge 10 ]] || die "Senha muito curta"
 else
-  pct config "$CTID" >/dev/null || die "CT $CTID ausente"
-  if [[ "$(pct status "$CTID")" != *running* ]]; then pct start "$CTID"; fi
-  pct exec "$CTID" -- test -f "$APPDIR/config.json" || die "Este CT nao possui configuracao do painel"
+  pct config "$CTID" >> "$REPORTS_INSTALL_LOG" 2>&1 || die "CT $CTID ausente"
+  printf '  Atualizacao no mesmo CT. Configuracao, dados, usuarios e Nginx local serao preservados.\n'
 fi
-msg "Preparando container $CTID"
-if [[ "$MODE" == install ]]; then
-  TEMPLATE="$(pveam list "$TEMPLATE_STORAGE" 2>/dev/null | grep -oE 'debian-13-standard_[^[:space:]]+\.tar\.(zst|gz|xz)' | sort -V | tail -1 || true)"
-  if [[ -z "$TEMPLATE" ]]; then
+
+# Serialize updates/installations of the same CT on this Proxmox host.
+LOCK_DIR="${REPORTS_LOCK_DIR:-/run/lock}"
+mkdir -p "$LOCK_DIR"
+exec 9>"$LOCK_DIR/dnsreports-$CTID.lock"
+flock -n 9 || die "Outra instalacao/atualizacao esta usando o CT $CTID"
+
+create_container(){
+  local template
+  template="$(pveam list "$TEMPLATE_STORAGE" 2>/dev/null | grep -oE 'debian-13-standard_[^[:space:]]+\.tar\.(zst|gz|xz)' | sort -V | tail -1 || true)"
+  if [[ -z "$template" ]]; then
     pveam update
-    TEMPLATE="$(pveam available --section system | grep -oE 'debian-13-standard_[^[:space:]]+\.tar\.(zst|gz|xz)' | sort -V | tail -1 || true)"
-    [[ -n "$TEMPLATE" ]] || die "Template Debian 13 indisponivel"
-    pveam download "$TEMPLATE_STORAGE" "$TEMPLATE"
+    template="$(pveam available --section system | grep -oE 'debian-13-standard_[^[:space:]]+\.tar\.(zst|gz|xz)' | sort -V | tail -1 || true)"
+    [[ -n "$template" ]] || die "Template Debian 13 indisponivel"
+    pveam download "$TEMPLATE_STORAGE" "$template"
   fi
   umask 022
-  pct create "$CTID" "${TEMPLATE_STORAGE}:vztmpl/$TEMPLATE" \
-    --hostname adguard-dns-reports --ostype debian --unprivileged 1 \
+  pct create "$CTID" "${TEMPLATE_STORAGE}:vztmpl/$template" \
+    --hostname dns-reports --ostype debian --unprivileged 1 \
     --rootfs "${STORAGE}:8" --cores 2 --memory 1024 --swap 512 \
-    --net0 "name=eth0,bridge=${BRIDGE},ip=dhcp" \
-    --timezone "$TZ_NAME" --onboot 1 --start 1
-  umask 077
-  pct exec "$CTID" -- bash -c 'DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3 python3-venv python3-pip nginx openssl ca-certificates curl'
-  pct exec "$CTID" -- mkdir -p "$APPDIR/data"
-  pct exec "$CTID" -- python3 -m venv "$APPDIR/venv"
-  export ADGUARD_URL ADGUARD_USER ADGUARD_PASS PANEL_USER PANEL_PASS TZ_NAME
-  python3 - "$ROOT" <<'PYCONFIG'
-import json, os, secrets, hashlib, sys
-from pathlib import Path
-salt = secrets.token_bytes(16)
-rounds = 380000
-hashed = hashlib.pbkdf2_hmac("sha256",os.environ["PANEL_PASS"].encode(),salt,rounds)
-configuration = {
-    "adguard_url": os.environ["ADGUARD_URL"],
-    "adguard_username": os.environ["ADGUARD_USER"],
-    "adguard_password": os.environ["ADGUARD_PASS"],
-    "panel_username": os.environ["PANEL_USER"],
-    "panel_password_hash": f"pbkdf2_sha256${rounds}${salt.hex()}${hashed.hex()}",
-    "session_secret": secrets.token_hex(48),
-    "retention_days": 90,
-    "initial_history_days": 7,
-    "timezone": os.environ["TZ_NAME"]
+    --net0 "name=eth0,bridge=${BRIDGE},ip=dhcp" --timezone "$TZ_NAME" --onboot 1 --start 1
 }
-target = Path(sys.argv[1]) / ".adguard-config-tmp.json"
-target.write_text(json.dumps(configuration,ensure_ascii=False),encoding="utf-8")
-target.chmod(0o600)
-PYCONFIG
-  unset ADGUARD_PASS PANEL_PASS
-else
-  msg "Backup de configuracao e banco SQLite existente"
-  pct exec "$CTID" -- bash -c 'cp -a /opt/dnsreports/config.json /opt/dnsreports/config.json.pre-refactor && if [ -f /opt/dnsreports/data/queries.sqlite3 ]; then cp -a /opt/dnsreports/data/queries.sqlite3 /opt/dnsreports/data/queries.sqlite3.pre-refactor; fi'
-fi
-# The repository is deployed as a Python package. No source generation here.
-pct exec "$CTID" -- mkdir -p "$APPDIR/source"
-# Copy one versioned archive with pct push; do not rely on LXC stdin forwarding.
-tar -C "$ROOT" -czf "$ROOT/.adguard-source-tmp.tar.gz" pyproject.toml README.md src
-pct push "$CTID" "$ROOT/.adguard-source-tmp.tar.gz" /tmp/adguard-source.tar.gz
-rm -f "$ROOT/.adguard-source-tmp.tar.gz"
-pct exec "$CTID" -- tar -xzf /tmp/adguard-source.tar.gz -C "$APPDIR/source"
-pct exec "$CTID" -- rm -f /tmp/adguard-source.tar.gz
-pct exec "$CTID" -- "$APPDIR/venv/bin/pip" install --no-cache-dir --upgrade "$APPDIR/source"
-if [[ "$MODE" == install ]]; then
-  pct push "$CTID" "$ROOT/.adguard-config-tmp.json" "$APPDIR/config.json"
-  rm -f "$ROOT/.adguard-config-tmp.json"
-  pct exec "$CTID" -- bash -c 'id -u dnsreports >/dev/null 2>&1 || useradd --system --home-dir /opt/dnsreports --shell /usr/sbin/nologin dnsreports'
-else
-  pct exec "$CTID" -- python3 -c 'import json, pathlib; p=pathlib.Path("/opt/dnsreports/config.json"); x=json.loads(p.read_text()); x["retention_days"]=90; x.setdefault("timezone", "Etc/UTC"); p.write_text(json.dumps(x));'
-fi
-pct exec "$CTID" -- bash -c '
-chown root:dnsreports /opt/dnsreports
-chmod 750 /opt/dnsreports
-chown root:dnsreports /opt/dnsreports/config.json
-chmod 640 /opt/dnsreports/config.json
-chown -R root:dnsreports /opt/dnsreports/venv /opt/dnsreports/source
-chmod -R g+rX /opt/dnsreports/venv /opt/dnsreports/source
-chown dnsreports:dnsreports /opt/dnsreports/data
-chmod 750 /opt/dnsreports/data
-'
-for unit in dnsreports.service dnsreports-collector.service dnsreports-collector.timer; do
-  if [[ "$MODE" == install ]]; then pct push "$CTID" "$ROOT/scripts/proxmox/systemd/$unit" "/etc/systemd/system/$unit"; fi
-done
-if [[ "$MODE" == install ]]; then
-  IP=""
-  for _ in $(seq 1 25); do
-    IP="$(pct exec "$CTID" -- ip -4 -o addr show dev eth0 scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -n1 || true)"
-    [[ "$IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && break
-    IP=""; sleep 2
+prepare_existing(){
+  if [[ "$(pct status "$CTID")" != *running* ]]; then pct start "$CTID"; fi
+  pct exec "$CTID" -- test -f "$APPDIR/config.json"
+  pct exec "$CTID" -- test -x "$APPDIR/venv/bin/python"
+}
+wait_ip(){
+  local address= attempt
+  for attempt in $(seq 1 30); do
+    address="$(pct exec "$CTID" -- ip -4 -o addr show dev eth0 scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -n1 || true)"
+    if [[ "$address" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      printf '%s\n' "$address" > "$ROOT/.adguard-ip-tmp"
+      return 0
+    fi
+    sleep 2
   done
-  [[ -n "$IP" ]] || die "CT sem IPv4 DHCP na interface eth0"
+  die "CT sem IPv4 na interface eth0"
+}
+ui_stage "Preparando container"
+if [[ "$MODE" == install ]]; then ui_run "Obtendo Debian e criando LXC" create_container; else ui_run "Verificando instalacao existente" prepare_existing; fi
+ui_run "Aguardando endereco IPv4" wait_ip
+IP="$(cat "$ROOT/.adguard-ip-tmp")"
+
+ui_stage "Dependencias do sistema"
+if [[ "$MODE" == install ]]; then
+  ui_run "Instalando Python, Nginx e certificados" pct exec "$CTID" -- bash -c \
+    'DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3 python3-venv python3-pip nginx openssl ca-certificates curl'
+else
+  ui_run "Verificando Python e Nginx existentes" pct exec "$CTID" -- bash -c 'python3 --version && nginx -t'
+fi
+
+protect_data(){
+  pct exec "$CTID" -- systemctl stop dnsreports-collector.timer dnsreports-collector.service dnsreports.service
+  pct exec "$CTID" -- bash -c 'if [ -f /etc/systemd/system/dnsreports-ntopng.timer ]; then systemctl stop dnsreports-ntopng.timer dnsreports-ntopng.service; fi'
+  pct exec "$CTID" -- python3 "$UPGRADE_HELPER" backup "$BACKUP_DIR"
+}
+new_configuration(){
+  pct exec "$CTID" -- mkdir -p "$APPDIR/data"
+  python3 "$ROOT/scripts/proxmox/create_config.py" "$ROOT/.adguard-config-tmp.json"
+  pct push "$CTID" "$ROOT/.adguard-config-tmp.json" "$APPDIR/config.json"
+}
+ui_stage "Protecao de dados"
+if [[ "$MODE" == update ]]; then
+  UPGRADE_HELPER="$(pct exec "$CTID" -- mktemp /tmp/dnsreports-upgrade.XXXXXXXX.py)"
+  pct push "$CTID" "$ROOT/scripts/proxmox/upgrade.py" "$UPGRADE_HELPER" >> "$REPORTS_INSTALL_LOG" 2>&1
+  BACKUP_DIR="$APPDIR/backups/update-$(date -u +%Y%m%dT%H%M%SZ)-$(openssl rand -hex 4)"
+  UPDATE_STOPPED=1
+  ui_run "Pausando servicos e criando backup consistente" protect_data
+else
+  export ADGUARD_URL ADGUARD_USER ADGUARD_PASS PANEL_USER PANEL_PASS TZ_NAME
+  ui_run "Gravando configuracao inicial privada" new_configuration
+  unset ADGUARD_PASS PANEL_PASS
+fi
+
+deploy_package(){
+  pct exec "$CTID" -- bash -c 'id -u dnsreports >/dev/null 2>&1 || useradd --system --home-dir /opt/dnsreports --shell /usr/sbin/nologin dnsreports'
+  pct exec "$CTID" -- mkdir -p "$APPDIR/source"
+  if [[ "$MODE" == install ]]; then pct exec "$CTID" -- python3 -m venv "$APPDIR/venv"; fi
+  tar -C "$ROOT" -czf "$ROOT/.adguard-source-tmp.tar.gz" pyproject.toml README.md src
+  pct push "$CTID" "$ROOT/.adguard-source-tmp.tar.gz" /tmp/adguard-source.tar.gz
+  pct exec "$CTID" -- tar -xzf /tmp/adguard-source.tar.gz -C "$APPDIR/source"
+  pct exec "$CTID" -- rm -f /tmp/adguard-source.tar.gz
+  pct exec "$CTID" -- "$APPDIR/venv/bin/pip" install --no-cache-dir --upgrade "$APPDIR/source"
+  pct exec "$CTID" -- bash -c '
+    chown root:dnsreports /opt/dnsreports /opt/dnsreports/config.json
+    chmod 750 /opt/dnsreports
+    chmod 640 /opt/dnsreports/config.json
+    chown -R root:dnsreports /opt/dnsreports/venv /opt/dnsreports/source
+    chmod -R g+rX /opt/dnsreports/venv /opt/dnsreports/source
+    chown -R dnsreports:dnsreports /opt/dnsreports/data
+    chmod 750 /opt/dnsreports/data
+  '
+}
+ui_stage "Aplicacao Python"
+ui_run "Instalando DNS, coleta ntopng e dependencias Python" deploy_package
+
+services_and_schema(){
+  local unit
+  for unit in "${UNITS[@]}"; do pct push "$CTID" "$ROOT/scripts/proxmox/systemd/$unit" "/etc/systemd/system/$unit"; done
+  pct exec "$CTID" -- systemctl daemon-reload
+  pct exec "$CTID" -- runuser -u dnsreports -- "$APPDIR/venv/bin/python" -c \
+    'from adguard_dns_reports.database import db_connect,create_schema; c=db_connect(); create_schema(c); c.close()'
+}
+ui_stage "Servicos e banco"
+ui_run "Aplicando migracoes aditivas e configurando coletores" services_and_schema
+
+new_proxy(){
   pct exec "$CTID" -- mkdir -p /etc/nginx/ssl
   cat > "$ROOT/.adguard-openssl-tmp.cnf" <<EOF
 [req]
@@ -168,35 +250,36 @@ CN=$IP
 subjectAltName=IP:$IP
 EOF
   pct push "$CTID" "$ROOT/.adguard-openssl-tmp.cnf" /root/dnsreports-cert.cnf
-  rm -f "$ROOT/.adguard-openssl-tmp.cnf"
   pct exec "$CTID" -- openssl req -x509 -nodes -newkey rsa:3072 -sha256 -days 825 \
     -keyout /etc/nginx/ssl/dnsreports.key -out /etc/nginx/ssl/dnsreports.crt \
     -config /root/dnsreports-cert.cnf -extensions v3_req
   pct exec "$CTID" -- chmod 600 /etc/nginx/ssl/dnsreports.key
   pct push "$CTID" "$ROOT/scripts/proxmox/nginx/dnsreports.conf" /etc/nginx/sites-available/dnsreports
   pct exec "$CTID" -- bash -c 'rm -f /etc/nginx/sites-enabled/default; ln -sfn /etc/nginx/sites-available/dnsreports /etc/nginx/sites-enabled/dnsreports'
-else
-  IP="$(pct exec "$CTID" -- ip -4 -o addr show dev eth0 scope global | awk '{print $4}' | cut -d/ -f1 | head -n1)"
-  # Replace existing service units to point at installed Python package,
-  # preserving nginx TLS certificates and locally customized reverse proxy.
-  for unit in dnsreports.service dnsreports-collector.service dnsreports-collector.timer; do
-    pct push "$CTID" "$ROOT/scripts/proxmox/systemd/$unit" "/etc/systemd/system/$unit"
-  done
-fi
-# New installs get an empty/additive VPN snippet. Ordinary updates keep local Nginx.
-if [[ "$MODE" == install ]]; then
   configure_access --no-reload
-elif [[ "${REPORTS_VPN_CIDRS+x}" == x ]]; then
-  configure_access
+}
+ui_stage "Proxy HTTPS"
+if [[ "$MODE" == install ]]; then ui_run "Configurando HTTPS e permissoes de rede" new_proxy; else ui_run "Validando Nginx local sem substituir ACL ou certificado" pct exec "$CTID" -- nginx -t; fi
+
+start_services(){
+  pct exec "$CTID" -- systemctl enable dnsreports.service dnsreports-collector.timer dnsreports-ntopng.timer nginx
+  pct exec "$CTID" -- systemctl reset-failed dnsreports.service || true
+  pct exec "$CTID" -- systemctl restart dnsreports.service
+  pct exec "$CTID" -- curl --fail --silent --show-error --connect-timeout 2 --max-time 3 \
+    --retry 15 --retry-connrefused --retry-delay 1 http://127.0.0.1:8088/login -o /dev/null
+  pct exec "$CTID" -- systemctl enable --now nginx
+  pct exec "$CTID" -- systemctl reload nginx
+  pct exec "$CTID" -- systemctl start dnsreports-collector.timer dnsreports-ntopng.timer
+  pct exec "$CTID" -- systemctl is-active --quiet dnsreports.service
+  pct exec "$CTID" -- systemctl is-active --quiet nginx
+}
+ui_stage "Inicializacao e validacao"
+ui_run "Iniciando painel e validando resposta HTTP" start_services
+if [[ "$MODE" == update && "${REPORTS_VPN_CIDRS+x}" == x ]]; then
+  ui_run "Aplicando lista VPN solicitada" configure_access
 fi
-msg "Reiniciando servicos"
-pct exec "$CTID" -- systemctl daemon-reload
-pct exec "$CTID" -- systemctl enable dnsreports.service dnsreports-collector.timer nginx >/dev/null
-pct exec "$CTID" -- systemctl reset-failed dnsreports.service || true
-pct exec "$CTID" -- systemctl restart dnsreports.service
-pct exec "$CTID" -- systemctl enable --now dnsreports-collector.timer >/dev/null
-pct exec "$CTID" -- nginx -t
-pct exec "$CTID" -- systemctl restart nginx
-pct exec "$CTID" -- systemctl is-active --quiet dnsreports.service || die "Veja: pct exec $CTID -- journalctl -u dnsreports -n 50"
-pct exec "$CTID" -- systemctl is-active --quiet nginx || die "Nginx nao iniciado"
-msg "Instalacao/atualizacao concluida. Acesso: https://$IP/ | CT: $CTID"
+UPDATE_STOPPED=0
+ui_finish "DNS-REPORTS pronto"
+printf '\n  Container: %s\n  Acesso: https://%s/\n' "$CTID" "$IP"
+[[ -z "$BACKUP_DIR" ]] || printf '  Backup no CT: %s\n' "$BACKUP_DIR"
+printf '  ntopng: entre com o administrador e abra Integracao ntopng.\n  Log detalhado: %s\n' "$REPORTS_INSTALL_LOG"

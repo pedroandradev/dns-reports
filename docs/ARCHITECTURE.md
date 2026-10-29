@@ -37,3 +37,22 @@ Ele mantém a ACL LAN do site, gerencia um snippet adicional de CIDRs VPN,
 faz backup e valida o Nginx antes da recarga, restaurando os arquivos em caso
 de falha. Atualizações sem `REPORTS_VPN_CIDRS` preservam a política existente.
 Detalhes de migração e rede: [VPN.md](VPN.md).
+
+## Tráfego ntopng e atualização
+
+- traffic/client.py: transporte REST v2 com paginação, limites e mensagens sem credenciais.
+- traffic/settings.py: configuração administrativa privada e associação configurável de locais.
+- traffic/collector.py: leitura de contadores e fluxos; integração opcional em serviço separado.
+- traffic/storage.py: tabelas aditivas, bases de comparação e agregações por hora.
+- traffic/views.py e exports.py: filtros, relatórios e exportações separados do histórico DNS.
+- templates/traffic*.html e ntopng_settings.html: interface de tráfego e configuração.
+- scripts/proxmox/lib/ui.sh: apresentação do instalador, tarefas silenciosas e indicadores.
+- scripts/proxmox/upgrade.py: snapshot consistente e restauração da aplicação.
+
+O coletor ntopng possui timer próprio e lock, sem depender da disponibilidade do
+AdGuard. A configuração nova fica no banco privado, mantendo o config.json
+existente. As credenciais não entram em templates/exportações/logs. Usuários
+comuns não podem alterar a integração.
+
+Consulte [NTOPNG.md](NTOPNG.md) para semântica dos contadores e limites de cobertura
+e [INSTALLER.md](INSTALLER.md) para implantação e recuperação.
