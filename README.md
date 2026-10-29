@@ -228,6 +228,24 @@ Registros DNS podem revelar hábitos, dispositivos e informações pessoais. Res
 
 O software é uma ferramenta de relatórios DNS, **não** um sistema de captura de tráfego, histórico de navegação completo ou identificação comprovada de aplicativos.
 
+## Testes locais
+
+As verificações são executadas localmente. Este projeto não utiliza workflows
+do GitHub Actions.
+
+~~~bash
+python -m pip install -e . pytest tzdata
+python -m compileall -q src scripts tests
+pytest -q
+bash -n Instalar-DNS-Reports-Proxmox.sh
+bash -n scripts/proxmox/install.sh
+bash -n scripts/proxmox/lib/ui.sh
+~~~
+
+O teste de integração HTTPS/ACL precisa de Nginx e OpenSSL instalados na
+máquina de testes. Sem essas dependências, ele é marcado como ignorado.
+Consulte [Testes de acesso e VPN](docs/VPN.md) para os caminhos no Windows.
+
 ## Projeto
 
 O projeto é independente e não é um produto oficial do AdGuard Home ou do Proxmox.

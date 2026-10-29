@@ -195,7 +195,7 @@ preservacao da LAN, substituicao/remocao da lista, backup/reversao, modo de aces
 com Proxmox simulado e HTTPS/proxy/ACL com Nginx real. O teste Nginx usa somente
 loopback e um cabecalho de origem confiado **apenas na configuracao de teste**;
 isso nao e instalado em producao. Sem nginx/openssl, esse teste e marcado como
-skip; a CI os instala para executa-lo. No Windows, caminhos de teste podem ser
+skip; instale essas dependencias localmente para executa-lo. No Windows, caminhos de teste podem ser
 informados por `REPORTS_TEST_NGINX`, `REPORTS_TEST_OPENSSL` e `REPORTS_TEST_BASH`.
 
 Os testes nao substituem a homologacao no Proxmox/pfSense real.
