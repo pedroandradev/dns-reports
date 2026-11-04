@@ -65,8 +65,10 @@ recover_update(){
   pct exec "$CTID" -- systemctl daemon-reload >> "$REPORTS_INSTALL_LOG" 2>&1 || return 1
   pct exec "$CTID" -- systemctl restart dnsreports.service >> "$REPORTS_INSTALL_LOG" 2>&1 || return 1
   pct exec "$CTID" -- systemctl enable --now dnsreports-collector.timer >> "$REPORTS_INSTALL_LOG" 2>&1 || return 1
+  pct exec "$CTID" -- systemctl start --no-block dnsreports-collector.service >> "$REPORTS_INSTALL_LOG" 2>&1 || return 1
   if pct exec "$CTID" -- test -f /etc/systemd/system/dnsreports-ntopng.timer; then
     pct exec "$CTID" -- systemctl enable --now dnsreports-ntopng.timer >> "$REPORTS_INSTALL_LOG" 2>&1 || return 1
+    pct exec "$CTID" -- systemctl start --no-block dnsreports-ntopng.service >> "$REPORTS_INSTALL_LOG" 2>&1 || return 1
   fi
   pct exec "$CTID" -- curl --fail --silent --show-error --connect-timeout 2 --max-time 3 \
     --retry 15 --retry-connrefused --retry-delay 1 http://127.0.0.1:8088/login -o /dev/null >> "$REPORTS_INSTALL_LOG" 2>&1 || return 1

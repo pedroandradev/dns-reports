@@ -172,6 +172,38 @@ pct exec ID_DO_CONTAINER -- journalctl -u dnsreports-ntopng -n 50 --no-pager
 pct exec ID_DO_CONTAINER -- systemctl start dnsreports-ntopng.service
 ~~~
 
+### Coleta parada após atualização ou reinício do timer
+
+Verifique a próxima execução, além do estado ativo:
+
+~~~bash
+pct exec ID_DO_CONTAINER -- systemctl list-timers --all --no-pager
+pct exec ID_DO_CONTAINER -- systemctl show dnsreports-ntopng.timer -p SubState -p NextElapseUSecMonotonic --no-pager
+~~~
+
+Um timer active (elapsed), sem próxima execução, pode deixar o painel acessível
+e o histórico congelado. O coletor DNS e o ntopng têm agendamentos independentes.
+
+Os timers usam OnActiveSec para garantir uma primeira coleta após cada
+ativação do próprio timer, inclusive após atualização com o container já ligado.
+Depois, OnUnitInactiveSec agenda o próximo ciclo após o fim do serviço:
+30 segundos para ntopng e 120 segundos para DNS, com AccuracySec de 5 segundos.
+Persistent não é usado: esse recurso só faz efeito em timers de calendário.
+
+Em instalações afetadas, atualizar os arquivos de timer, executar daemon-reload
+e reiniciar o timer aplica a correção. Uma execução gerenciada manual pode
+retomar a coleta imediatamente:
+
+~~~bash
+pct exec ID_DO_CONTAINER -- systemctl start --no-block dnsreports-ntopng.service
+~~~
+
+Confirme ciclos posteriores pelo journal e pela última gravação no banco.
+O rollback do instalador também inicia uma coleta para rearmar versões antigas
+dos timers restaurados. Reiniciar apenas o painel web não retoma esses serviços.
+Fluxos não observados durante a interrupção não são reconstruídos a partir da
+lista de fluxos ativos; o histórico DNS que continuou sendo coletado é separado.
+
 O serviço utiliza o usuário restrito dnsreports, bloqueio contra execuções
 simultâneas, validação TLS, timeouts e acesso de escrita apenas em data/.
 Os dados de integração e credenciais ficam em traffic_settings, dentro do banco

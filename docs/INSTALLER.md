@@ -109,3 +109,24 @@ execução dos handlers exige inspeção dos backups e recuperação pelo operad
 Faça login com o administrador existente e abra Integração ntopng. Somente os
 dados novos de conexão com o ntopng precisam ser informados. A instalação antiga
 do AdGuard continua funcionando. Consulte [NTOPNG.md](NTOPNG.md).
+
+
+## Validação dos timers após atualização
+
+Os timers DNS e ntopng agendam a primeira execução a partir da própria
+ativação, com OnActiveSec, e as demais após o término do coletor.
+Isso evita depender de um disparo do boot já consumido ou de histórico
+em memória de um serviço que foi descarregado durante a atualização.
+O procedimento de recuperação também inicia os coletores de forma assíncrona
+para rearmar os timers de versões antigas restauradas.
+
+O teste opcional tests/test_systemd_timers.py exercita primeiro disparo,
+repetição e parada/reativação com systemd real. Executa unidades temporárias
+que apenas tocam arquivos em /run, sem acessar dados nem serviços da aplicação:
+
+~~~bash
+sudo env REPORTS_TEST_SYSTEMD=1 python3 tests/test_systemd_timers.py
+~~~
+
+No Windows ou sem habilitação explícita, esse teste é ignorado. Os demais
+testes continuam sendo executados localmente, sem GitHub Actions.
