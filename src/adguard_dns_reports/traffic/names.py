@@ -1,6 +1,7 @@
 """Strict hostname extraction from ntopng flow metadata, without retaining URL paths."""
 import ipaddress
 import re
+from functools import lru_cache
 from urllib.parse import urlsplit
 
 GENERIC = {"tls", "ssl", "quic", "http", "https", "tcp", "udp", "unknown", "unidentified",
@@ -11,13 +12,19 @@ TECHNICAL = {"icmp", "icmpv6", "stun", "dns", "mdns", "llmnr", "ssdp", "arp", "d
 
 def reported_domain(value):
     name = str(value or "").strip().lower().rstrip(".")
+    if len(name) > 253 or "." not in name:
+        return ""
+    return _reported_domain(name)
+
+
+@lru_cache(maxsize=4096)
+def _reported_domain(name):
+    """Bound memory and repeated validation of destination names."""
     try:
         ipaddress.ip_address(name)
         return ""
     except ValueError:
         pass
-    if len(name) > 253 or "." not in name:
-        return ""
     if not all(re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label)
                for label in name.split(".")):
         return ""
