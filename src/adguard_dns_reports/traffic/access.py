@@ -170,10 +170,11 @@ def group_accesses(rows, settings, meta, now):
     gap = int(settings.get("session_idle_seconds", 120))
     for raw in rows:
         row = dict(raw)
+        dns_names = saved_candidates(row.get("dns_candidates"))
         service, service_key, evidence = destination(
             row["application"], row["remote_name"], row["remote_ip"], row["remote_port"], row["protocol"],
-            row.get("name_source", ""), saved_candidates(row.get("dns_candidates")))
-        row["dns_names"] = saved_candidates(row.get("dns_candidates"))
+            row.get("name_source", ""), dns_names)
+        row["dns_names"] = dns_names
         row["kind"] = identification_kind(service_key, service)
         row.update(service=service, service_key=service_key, evidence=evidence)
         row["state"] = presented_state(row, settings, meta, now)

@@ -35,11 +35,12 @@ def filters():
             abort(400, 'Data inválida')
         if since >= till or till - since > timedelta(days=366):
             abort(400, 'Intervalo inválido ou maior que 366 dias')
-    clauses = ["((record_type='event' AND ts>=? AND ts<?) OR"
-               " (record_type='daily' AND period_start>=? AND period_end<=?))"]
+    # Events have period_start=period_end=ts. Daily summaries cover a full day.
+    # The common range also lets SQLite seek the recent-event timestamp index.
+    clauses = ["(period_start>=? AND period_start<? AND period_end<=?)"]
     values = [since.isoformat(timespec='microseconds').replace('+00:00', 'Z'),
               till.isoformat(timespec='microseconds').replace('+00:00', 'Z')]
-    values += values[:]
+    values.append(values[1])
     client = request.args.get('client', '').strip()[:120]
     search = request.args.get('search', '').strip()[:150]
     status = request.args.get('status', 'all')
@@ -85,19 +86,8 @@ def dashboard():
     conn = db_connect()
     create_schema(conn)
     try:
-        summary = conn.execute('''SELECT COALESCE(SUM(hits),0) count, COUNT(DISTINCT ip) computers,
-                COALESCE(SUM(blocked*hits),0) blocked FROM dns_report WHERE ''' + where, values).fetchone()
-        services = conn.execute('''SELECT service name, SUM(hits) hits FROM dns_report WHERE ''' + where +
-                                ''' GROUP BY service ORDER BY hits DESC LIMIT 12''', values).fetchall()
-        clients = conn.execute('''SELECT CASE WHEN hostname=ip OR hostname='' THEN ip ELSE hostname END name,
-               ip, SUM(hits) hits FROM dns_report WHERE ''' + where +
-               ''' GROUP BY ip ORDER BY hits DESC LIMIT 12''', values).fetchall()
-        domains = conn.execute('SELECT domain name,SUM(hits) hits FROM dns_report WHERE ' + where +
-                               ' GROUP BY domain ORDER BY hits DESC LIMIT 10', values).fetchall()
-        rows = conn.execute('SELECT * FROM dns_report WHERE ' + where +
-                            ' ORDER BY ts DESC LIMIT 150', values).fetchall()
-        choices = conn.execute('''SELECT ip, MAX(CASE WHEN hostname!=ip THEN hostname ELSE '' END) name
-                                  FROM dns_report GROUP BY ip ORDER BY name,ip''').fetchall()
+        from .dns_dashboard import dashboard_data
+        summary, services, clients, domains, rows, choices = dashboard_data(conn, where, values)
         meta = dict(conn.execute('SELECT key,value FROM metadata').fetchall())
     finally:
         conn.close()

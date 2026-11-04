@@ -69,6 +69,7 @@ def test_all_pages_share_three_distinct_reports_and_active_location(configured, 
     assert nav.theme_buttons >= 1
     assert html.count('class="shell"') == 1
     assert html.count('class="sidebar"') == 1
+    assert html.count('Desenvolvido por Pedro Andrade') == 1
     assert "AdGuard DNS Reports" not in html
     assert "script-src 'self'" in response.headers["Content-Security-Policy"]
 
