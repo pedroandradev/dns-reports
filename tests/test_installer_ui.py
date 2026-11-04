@@ -117,4 +117,6 @@ def test_update_failure_restores_application_and_old_services(tmp_path):
     assert result.returncode != 0
     assert " restore /opt/dnsreports/backups/update-" in calls
     assert "systemctl restart dnsreports.service" in calls
+    assert "systemctl start --no-block dnsreports-collector.service" in calls
+    assert "systemctl start --no-block dnsreports-ntopng.service" in calls
     assert "pronto" not in result.stdout

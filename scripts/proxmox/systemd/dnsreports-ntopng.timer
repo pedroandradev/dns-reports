@@ -2,9 +2,9 @@
 Description=DNS Reports - ntopng traffic measurements every 30 seconds
 
 [Timer]
-OnBootSec=45s
+OnActiveSec=45s
 OnUnitInactiveSec=30s
-Persistent=true
+AccuracySec=5s
 Unit=dnsreports-ntopng.service
 
 [Install]
