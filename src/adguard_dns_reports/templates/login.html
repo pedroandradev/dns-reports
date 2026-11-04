@@ -5,7 +5,7 @@
 {% block body %}
 <div class="login-theme">{{ theme_toggle() }}</div>
 <main class="login-card">
-  <div class="brand"><div class="brand-mark">◈</div><div><strong>DNS-REPORTS</strong><small>Monitoramento de rede</small></div></div>
+  <div class="brand"><div class="brand-mark">◈</div><div><strong>DNS-REPORTS</strong><small>Monitoramento de rede</small><small class="brand-credit">Desenvolvido por Pedro Andrade</small></div></div>
   <h1>Acesso ao painel</h1><p class="muted">Entre com suas credenciais para consultar o histórico de sua rede.</p>
   {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
   <form method="post">
@@ -14,6 +14,6 @@
     <label for="password">Senha</label><input id="password" type="password" name="password" autocomplete="current-password" required>
     <button class="btn primary full">Entrar</button>
   </form>
-  <p class="login-foot">DNS-REPORTS · Acesso aos relatórios da rede<br>Desenvolvido por Pedro Andrade</p>
+  <p class="login-foot">DNS-REPORTS · Acesso aos relatórios da rede</p>
 </main>
 {% endblock %}
