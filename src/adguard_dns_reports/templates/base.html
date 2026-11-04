@@ -7,7 +7,7 @@
 <div class="shell">
   <aside class="sidebar">
     <a class="brand" href="{{ url_for('accesses.dashboard') }}" aria-label="DNS-REPORTS, início">
-      <div class="brand-mark">◈</div><div><strong>DNS-REPORTS</strong><small>Monitoramento de rede</small></div>
+      <div class="brand-mark">◈</div><div><strong>DNS-REPORTS</strong><small>Monitoramento de rede</small><small class="brand-credit">Desenvolvido por Pedro Andrade</small></div>
     </a>
     <div class="aside-section">RELATÓRIOS</div>
     <nav class="report-nav" aria-label="Relatórios">
@@ -42,7 +42,7 @@
       </nav>
       {% endif %}
       {% block content %}{% endblock %}
-      <footer>{% block footer %}DNS-REPORTS · Histórico disponível a partir da coleta. A identificação de serviços depende das evidências observadas.{% endblock %}<br>Desenvolvido por Pedro Andrade</footer>
+      <footer>{% block footer %}DNS-REPORTS · Histórico disponível a partir da coleta. A identificação de serviços depende das evidências observadas.{% endblock %}</footer>
     </div>
   </main>
 </div>

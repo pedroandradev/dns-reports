@@ -88,6 +88,7 @@ a:focus-visible, button:focus-visible, summary:focus-visible { outline: 3px soli
 .brand-mark { display: grid; place-items: center; background: linear-gradient(145deg,#0d88a8,#2355bc); color: #fff; width: 42px; height: 42px; border-radius: 12px; font-size: 29px; flex-shrink: 0; }
 .brand strong { display: block; font-size: 17px; letter-spacing: -.4px; }
 .brand small { font-size: 11px; display: block; margin-top: 4px; color: var(--sidebar-muted); }
+.brand .brand-credit { font-size: 10px; line-height: 1.5; }
 .aside-section { font-size: 10px; font-weight: 800; letter-spacing: 1.7px; color: var(--sidebar-muted); margin: 42px 12px 10px; }
 .report-nav { display: grid; gap: 7px; }
 .nav { padding: 12px; border-radius: 9px; font-size: 13px; display: flex; gap: 11px; align-items: center; color: var(--sidebar-text); min-height: 46px; }
