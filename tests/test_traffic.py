@@ -324,7 +324,7 @@ def test_form_save_keeps_adguard_configuration_and_password_private(configured):
     assert CONFIG.read_bytes() == before
 
 
-def test_old_connections_are_pruned_but_hourly_measurements_remain(configured):
+def test_old_ended_connections_are_consolidated_before_detail_removal(configured):
     from adguard_dns_reports.traffic.collector import collect
     from adguard_dns_reports.database import db_connect
     now = int(time.time())
@@ -332,11 +332,13 @@ def test_old_connections_are_pruned_but_hourly_measurements_remain(configured):
     collect(FakeApi(1100, 2200, 2300, 550), now - 8 * 86400 + 30)
     conn = db_connect()
     old = conn.execute("SELECT uid FROM traffic_connections LIMIT 1").fetchone()[0]
-    conn.execute("UPDATE traffic_connections SET uid='old-connection' WHERE uid=?", (old,))
+    conn.execute("UPDATE traffic_connections SET uid='old-connection',flow_state='ended',last_checked=? WHERE uid=?",
+                 (now - 7 * 86400,old))
     conn.commit()
     conn.close()
     collect(FakeApi(1200, 2300, 2400, 650), now)
     assert all(row["uid"] != "old-connection" for row in rows("traffic_connections"))
+    assert sum(row["flow_count"] for row in rows("access_daily")) >= 1
     assert any(row["sample_end"] < now - 7 * 86400 for row in rows("traffic_usage"))
 
 

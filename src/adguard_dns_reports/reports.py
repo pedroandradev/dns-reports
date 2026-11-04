@@ -15,7 +15,8 @@ from .database import db_connect, create_schema
 from .security import token
 bp = Blueprint("reports", __name__)
 ZONE = ZoneInfo(config().get("timezone", "Etc/UTC"))
-FIELDS = ['Data/Hora','Hostname','IP','Dominio','Servico provavel','Categoria','Tipo DNS','Resultado','Bloqueada','Motivo']
+FIELDS = ['Data/Hora','Hostname','IP','Dominio','Servico provavel','Categoria','Tipo DNS','Resultado','Bloqueada','Motivo',
+          'Quantidade','Tipo de registro','Primeiro registro']
 def filters():
     period_raw = request.args.get('period', '7')
     period = int(period_raw) if period_raw in ('1', '7', '30', '90') else 7
@@ -34,9 +35,11 @@ def filters():
             abort(400, 'Data inválida')
         if since >= till or till - since > timedelta(days=366):
             abort(400, 'Intervalo inválido ou maior que 366 dias')
-    clauses = ['ts >= ?', 'ts < ?']
+    clauses = ["((record_type='event' AND ts>=? AND ts<?) OR"
+               " (record_type='daily' AND period_start>=? AND period_end<=?))"]
     values = [since.isoformat(timespec='microseconds').replace('+00:00', 'Z'),
               till.isoformat(timespec='microseconds').replace('+00:00', 'Z')]
+    values += values[:]
     client = request.args.get('client', '').strip()[:120]
     search = request.args.get('search', '').strip()[:150]
     status = request.args.get('status', 'all')
@@ -71,7 +74,9 @@ def excel_safe(value):
 
 def row_fields(row):
     return [human_time(row['ts']), label(row), row['ip'], row['domain'], row['service'], row['category'],
-            row['qtype'], row['status'], 'Sim' if row['blocked'] else 'Não', row['reason']]
+            row['qtype'], row['status'], 'Sim' if row['blocked'] else 'Não', row['reason'],
+            row['hits'], 'Resumo diário' if row['record_type']=='daily' else 'Evento individual',
+            human_time(row['first_ts'])]
 
 
 @bp.get('/dns')
@@ -80,19 +85,19 @@ def dashboard():
     conn = db_connect()
     create_schema(conn)
     try:
-        summary = conn.execute('''SELECT COUNT(*) count, COUNT(DISTINCT ip) computers,
-                COALESCE(SUM(blocked),0) blocked FROM queries WHERE ''' + where, values).fetchone()
-        services = conn.execute('''SELECT service name, COUNT(*) hits FROM queries WHERE ''' + where +
+        summary = conn.execute('''SELECT COALESCE(SUM(hits),0) count, COUNT(DISTINCT ip) computers,
+                COALESCE(SUM(blocked*hits),0) blocked FROM dns_report WHERE ''' + where, values).fetchone()
+        services = conn.execute('''SELECT service name, SUM(hits) hits FROM dns_report WHERE ''' + where +
                                 ''' GROUP BY service ORDER BY hits DESC LIMIT 12''', values).fetchall()
         clients = conn.execute('''SELECT CASE WHEN hostname=ip OR hostname='' THEN ip ELSE hostname END name,
-               ip, COUNT(*) hits FROM queries WHERE ''' + where +
+               ip, SUM(hits) hits FROM dns_report WHERE ''' + where +
                ''' GROUP BY ip ORDER BY hits DESC LIMIT 12''', values).fetchall()
-        domains = conn.execute('SELECT domain name,COUNT(*) hits FROM queries WHERE ' + where +
+        domains = conn.execute('SELECT domain name,SUM(hits) hits FROM dns_report WHERE ' + where +
                                ' GROUP BY domain ORDER BY hits DESC LIMIT 10', values).fetchall()
-        rows = conn.execute('SELECT * FROM queries WHERE ' + where +
+        rows = conn.execute('SELECT * FROM dns_report WHERE ' + where +
                             ' ORDER BY ts DESC LIMIT 150', values).fetchall()
         choices = conn.execute('''SELECT ip, MAX(CASE WHEN hostname!=ip THEN hostname ELSE '' END) name
-                                  FROM queries GROUP BY ip ORDER BY name,ip''').fetchall()
+                                  FROM dns_report GROUP BY ip ORDER BY name,ip''').fetchall()
         meta = dict(conn.execute('SELECT key,value FROM metadata').fetchall())
     finally:
         conn.close()
@@ -112,7 +117,7 @@ def export(format_name):
     conn = db_connect()
     create_schema(conn)
     limit = 1000 if format_name == 'pdf' else 100000
-    rows = conn.execute('SELECT * FROM queries WHERE ' + where +
+    rows = conn.execute('SELECT * FROM dns_report WHERE ' + where +
                         ' ORDER BY ts DESC LIMIT ?', [*values, limit]).fetchall()
     conn.close()
     stamp = datetime.now(ZONE).strftime('%Y%m%d-%H%M')
@@ -143,10 +148,10 @@ def export(format_name):
              Paragraph('Documento gerado a partir das consultas DNS. Domínios e serviços prováveis não comprovam acesso efetivo.', styles['Normal']),
              Paragraph(f'Gerado em {escape(datetime.now(ZONE).strftime("%d/%m/%Y %H:%M"))} — {len(rows)} consultas (PDF limitado a 1.000 linhas)', styles['Normal']),
              Spacer(1, 14)]
-    head = ['Data / Hora', 'Computador', 'IP', 'Domínio', 'Serviço provável', 'Bloqueada']
+    head = ['Data / Hora', 'Computador', 'IP', 'Domínio / quantidade', 'Serviço provável', 'Bloqueada']
     tdata = [head]
     for r in rows:
-        vals = [human_time(r['ts']), label(r), r['ip'], r['domain'], r['service'], 'Sim' if r['blocked'] else 'Não']
+        vals = [human_time(r['ts']), label(r), r['ip'], r['domain'] + ' · ' + str(r['hits']) + (' (resumo diário)' if r['record_type']=='daily' else ''), r['service'], 'Sim' if r['blocked'] else 'Não']
         tdata.append([Paragraph(escape(str(x)), styles['BodyText']) for x in vals])
     table = Table(tdata, repeatRows=1, colWidths=[107, 131, 91, 193, 131, 57], hAlign='LEFT')
     table.setStyle(TableStyle([('BACKGROUND', (0,0),(-1,0),colors.HexColor('#e7edf5')),

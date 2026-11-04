@@ -6,6 +6,7 @@ from flask import Blueprint, abort, render_template, request, session
 from ..database import create_schema, db_connect
 from ..security import token
 from .access import group_accesses, duration_label
+from ..history import daily_access, days as history_days
 from .settings import load_settings
 from .views import filters, human_bytes, human_time
 
@@ -40,13 +41,18 @@ def report_data():
     try:
         rows = conn.execute("SELECT * FROM traffic_connections WHERE " + " AND ".join(clauses) +
                             " ORDER BY observed_at DESC LIMIT ?", [*values, MAX_FLOWS + 1]).fetchall()
+        archived = conn.execute("SELECT * FROM access_daily WHERE " + " AND ".join(clauses) +
+                                " ORDER BY observed_at DESC LIMIT ?", [*values, MAX_FLOWS + 1]).fetchall()
         settings = load_settings(conn)
         meta = dict(conn.execute("SELECT key,value FROM metadata WHERE key LIKE 'ntopng_%'"))
         locations = [row[0] for row in conn.execute("SELECT DISTINCT location FROM traffic_connections ORDER BY location")]
     finally:
         conn.close()
-    truncated = len(rows) > MAX_FLOWS
+    truncated = len(rows) > MAX_FLOWS or len(archived) > MAX_FLOWS
     grouped = group_accesses(rows[:MAX_FLOWS], settings, meta, int(time.time()))
+    grouped += [daily_access(row) for row in archived[:MAX_FLOWS]]
+    priority = {"active":0,"pending":1,"unknown":2,"paused":3,"legacy":4,"ended":5}
+    grouped.sort(key=lambda row: (priority[row["state"]], -row["last_observed"]))
     if selected["application"]:
         search = selected["application"].casefold()
         grouped = [row for row in grouped if search in row["service"].casefold()
@@ -90,7 +96,7 @@ def dashboard():
         "accesses.html", accesses=grouped[(page-1)*PAGE_SIZE:page*PAGE_SIZE], selected=selected,
         meta=meta, enabled=enabled, locations=locations, truncated=truncated, summary=summary,
         page=page, pages=pages, page_url=page_url, fmt=human_bytes, dt=human_time,
-        duration=duration_label, args=request.args, csrf=token(), username=session.get("username", ""))
+        duration=duration_label, history_days=history_days(), args=request.args, csrf=token(), username=session.get("username", ""))
 
 
 @bp.get("/acessos/export/<format_name>")

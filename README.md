@@ -23,6 +23,14 @@ com respostas DNS do mesmo cliente/IP/TTL. Ambiguidades de CDN, classificação
 pendente e protocolos técnicos ficam visíveis, sem inventar um site.
 Veja [Identificação de destinos e diagnóstico](docs/IDENTIFICATION.md).
 
+## Histórico com pouco espaço
+
+O histórico de 90 dias usa resumos diários por computador e destino. Eventos
+recentes ficam detalhados; repetições antigas são consolidadas com contagem,
+horários e volume antes da remoção. A duração histórica tem resolução de um
+minuto, sem somar conexões paralelas. Backups novos são comprimidos e verificados.
+Veja [Histórico compacto e retenção](docs/HISTORY.md).
+
 ## Navegação e aparência
 
 O menu separa **Visualizador de Acesso**, **Consultas de DNS** e **Consumo de

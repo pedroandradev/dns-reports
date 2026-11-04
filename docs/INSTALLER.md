@@ -60,7 +60,7 @@ Antes de alterar o pacote, o instalador pausa os coletores e a aplicação e cri
 /opt/dnsreports/backups/update-DATA-IDENTIFICADOR/
   app/                  # config, venv, source e app/core legados, quando presentes
   units/                # unidades systemd anteriores
-  queries.sqlite3       # cópia consistente via SQLite Backup API
+  queries.sqlite3.gz    # snapshot SQLite comprimido e verificado
   upgrade.py            # auxiliar para recuperação
   manifest.json         # escrito somente ao concluir o backup
 ~~~
@@ -130,3 +130,16 @@ sudo env REPORTS_TEST_SYSTEMD=1 python3 tests/test_systemd_timers.py
 
 No Windows ou sem habilitação explícita, esse teste é ignorado. Os demais
 testes continuam sendo executados localmente, sem GitHub Actions.
+
+
+## Consolidação do histórico
+
+A partir da 1.6, a etapa de banco consolida eventos antigos em resumos diários,
+com os serviços pausados e backup consistente já concluído. Depois executa
+VACUUM uma vez para recuperar espaço físico. Essa fase pode levar minutos.
+Os dados consolidados mantêm contagens e volume; o detalhe antigo sai das
+tabelas recentes somente na mesma transação da gravação dos resumos.
+
+Os snapshots novos usam queries.sqlite3.gz, com verificação de integridade
+antes de remover a cópia descompactada. O código e as unidades continuam
+disponíveis no mesmo snapshot privado. Detalhes: [HISTORY.md](HISTORY.md).

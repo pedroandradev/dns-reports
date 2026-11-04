@@ -9,6 +9,7 @@ from ..database import create_schema, db_connect
 from ..security import require_csrf, token
 from .client import NtopClient, NtopError
 from .settings import load_settings, save_settings, validate
+from ..history import days as history_days
 
 bp = Blueprint("traffic", __name__)
 
@@ -111,7 +112,7 @@ def dashboard():
         conn.close()
     return render_template("traffic.html", selected=selected, summary=summary, clients=clients,
                            applications=applications, locations=locations, connections=connections,
-                           meta=meta, enabled=settings["enabled"], choices=choices,
+                           meta=meta, history_days=history_days(), enabled=settings["enabled"], choices=choices,
                            location_choices=location_choices, fmt=human_bytes, dt=human_time,
                            args=request.args, csrf=token(), username=session.get("username", ""))
 
