@@ -10,6 +10,7 @@ from .classification import classify
 from .config import config
 from .database import db_connect, create_schema
 from .dns_evidence import remember_answers, prune
+from .history import archive_dns, archive_accesses
 def iso_timestamp(ts):
     """Convert timestamp to sortable UTC at 1 microsecond resolution."""
     try:
@@ -83,6 +84,8 @@ def collect(max_pages=500):
     now = datetime.now(timezone.utc)
     first_import_cutoff = now - timedelta(days=int(settings.get('initial_history_days', 7)))
     cutoff = previous_dt or first_import_cutoff
+    archived = c.execute("SELECT value FROM metadata WHERE key='dns_archived_before'").fetchone()
+    archived_before = archived[0] if archived else ''
     cursor = ''
     total_added, pages, seen = 0, 0, set()
     complete = False
@@ -106,7 +109,7 @@ def collect(max_pages=500):
                     dt = datetime.fromisoformat(ts.replace('Z', '+00:00'))
                     if oldest_time is None or dt < oldest_time:
                         oldest_time = dt
-                    if dt < cutoff:
+                    if dt < cutoff or (archived_before and ts < archived_before):
                         continue
                 row = row_from_api(entry, c)
                 if row:
@@ -140,6 +143,8 @@ def collect(max_pages=500):
         delete_before = (now - timedelta(days=ttl)).isoformat().replace('+00:00', 'Z')
         c.execute('DELETE FROM queries WHERE ts < ?', (delete_before,))
         prune(c, int(now.timestamp()))
+        archive_dns(c, int(now.timestamp()))
+        archive_accesses(c, int(now.timestamp()))
         # Refresh hostname information for existing devices whenever a PTR first becomes available.
         c.execute('''UPDATE queries SET hostname=(SELECT hostname FROM client_names WHERE ip=queries.ip)
                      WHERE ip IN (SELECT ip FROM client_names WHERE hostname != ip)

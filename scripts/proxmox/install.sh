@@ -235,9 +235,10 @@ services_and_schema(){
   pct exec "$CTID" -- systemctl daemon-reload
   pct exec "$CTID" -- runuser -u dnsreports -- "$APPDIR/venv/bin/python" -c \
     'from adguard_dns_reports.database import db_connect,create_schema; c=db_connect(); create_schema(c); c.close()'
+  pct exec "$CTID" -- runuser -u dnsreports -- "$APPDIR/venv/bin/dnsreports-compact" --vacuum
 }
 ui_stage "Servicos e banco"
-ui_run "Aplicando migracoes aditivas e configurando coletores" services_and_schema
+ui_run "Consolidando historico e configurando coletores" services_and_schema
 
 new_proxy(){
   pct exec "$CTID" -- mkdir -p /etc/nginx/ssl

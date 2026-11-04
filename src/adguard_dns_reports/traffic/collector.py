@@ -11,6 +11,7 @@ from .client import NtopClient, NtopError
 from .settings import load_settings, local_name
 from .storage import counter, metadata
 from .access import observe, complete_snapshot
+from ..history import archive_accesses
 from .names import reported_domain
 from ..dns_evidence import candidates, prune
 
@@ -173,16 +174,7 @@ def collect(client=None, now=None):
         ttl = max(1, min(int(config().get("retention_days", 90)), 3660))
         cutoff = now - ttl * 86400
         conn.execute("DELETE FROM traffic_usage WHERE sample_end < ?", (cutoff,))
-        connection_days = max(1, min(int(config().get("ntopng_connection_retention_days", 7)), ttl))
-        connection_limit = max(1000, min(int(config().get("ntopng_connection_limit", 100000)), 1000000))
-        before = conn.total_changes
-        conn.execute("DELETE FROM traffic_connections WHERE observed_at < ?", (now - connection_days * 86400,))
-        conn.execute("DELETE FROM traffic_connections WHERE uid IN "
-                     "(SELECT uid FROM traffic_connections ORDER BY observed_at DESC LIMIT -1 OFFSET ?)",
-                     (connection_limit,))
-        metadata(conn, "ntopng_connections_removed_last", conn.total_changes - before)
-        metadata(conn, "ntopng_connection_days", connection_days)
-        metadata(conn, "ntopng_connection_limit", connection_limit)
+        archive_accesses(conn, now)
         metadata(conn, "ntopng_app_cursor", (cursor + max(1, apps_attempted)) % max(1, len(hosts)))
         conn.execute("DELETE FROM traffic_state WHERE sampled_at < ? AND kind='internet'", (now - 600,))
         conn.execute("DELETE FROM traffic_state WHERE sampled_at < ?", (now - 86400,))

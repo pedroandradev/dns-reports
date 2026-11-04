@@ -91,3 +91,17 @@ style.css usa tokens semânticos de cor para os temas claro e escuro; theme.js
 salva somente a preferência de aparência no navegador, sem mudar configuração
 ou sessão do servidor. Os arquivos são empacotados com a aplicação e respeitam
 a CSP existente. Detalhes: [INTERFACE.md](INTERFACE.md).
+
+
+## Histórico compacto
+
+history.py mantém dns_daily e access_daily junto ao detalhe recente.
+dns_report combina as consultas recentes e os resumos, com quantidades
+ponderadas nos relatórios. Coletores consolidam e expiram os resumos dentro
+da janela global de 90 dias. Datas DNS respeitam o fuso do painel; intervalos
+de acesso são divididos em dias UTC, usando mapas de minutos comprimidos.
+
+A manutenção dnsreports-compact --vacuum é executada pelo instalador enquanto
+os serviços estão pausados. A remoção do detalhe é transacional e posterior à
+gravação dos resumos. Os backups SQLite usam gzip e SHA-256, preservando o fluxo
+de recuperação. Consulte [HISTORY.md](HISTORY.md).

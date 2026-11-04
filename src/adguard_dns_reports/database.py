@@ -47,6 +47,8 @@ def create_schema(c):
     create_tables(c)
     from .dns_evidence import create_table
     create_table(c)
+    from .history import create_tables as create_history_tables
+    create_history_tables(c)
     # Safe, additive SQLite migration for existing multi-user installations.
     columns = {r['name'] for r in c.execute('PRAGMA table_info(users)').fetchall()}
     if 'is_admin' not in columns:

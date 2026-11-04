@@ -82,10 +82,11 @@ equipamento e serviço. Consultas de usuários comuns nunca alteram esse critér
 - O agrupamento usa o critério atual; alterar a tolerância pode alterar como
   os registros retidos são agrupados. Os fluxos originais são preservados.
 
-A retenção e o limite de fluxos são os mesmos do registro de conexões: padrão
-7 dias/100.000 fluxos, configuráveis conforme NTOPNG.md. Dados removidos por
-retenção não fazem parte dos agrupamentos. As medições horárias de consumo
-continuam separadas e seguem a retenção geral.
+O histórico fica por 90 dias em resumos diários. Fluxos recentes permanecem
+detalhados; encerrados antigos são consolidados antes da remoção. O alvo de
+100.000 detalhes não elimina os resumos de 90 dias. As medições horárias
+continuam separadas. Duração dos resumos é aproximada por minuto e os registros
+consolidados são identificados na tela/exportações. Veja [HISTORY.md](HISTORY.md).
 
 ## Consulta e exportação
 

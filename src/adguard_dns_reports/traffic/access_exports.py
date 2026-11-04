@@ -17,9 +17,9 @@ from .views import human_time
 
 HEADERS = ["Computador", "IP", "MAC", "Unidade/setor", "Serviço/site", "Evidência",
            "Destinos reportados", "Início reportado pelo ntopng", "Última atividade",
-           "Última presença na coleta", "Duração observada (segundos)", "Bytes dos fluxos retidos",
+           "Última presença na coleta", "Duração observada (segundos)", "Bytes dos registros retidos/consolidados",
            "Fluxos agrupados", "Estado", "Primeira ausência (fim estimado)", "Verificado em",
-           "Tipo de identificação", "Observação", "Domínios DNS candidatos (inferência)"]
+           "Tipo de identificação", "Observação", "Domínios DNS candidatos (inferência)", "Tipo de registro", "Dia UTC do resumo"]
 
 
 def export_accesses(rows, fmt):
@@ -28,7 +28,7 @@ def export_accesses(rows, fmt):
                human_time(row["last_activity"]), human_time(row["last_observed"]),
                row["duration"], row["bytes"], row["flow_count"], row["state_label"],
                human_time(row["missing_since"]), human_time(row["checked_at"]), row["kind"],
-               row["diagnostic"], ", ".join(row["dns_names"])] for row in rows]
+               row["diagnostic"], ", ".join(row["dns_names"]), row.get("record_type","flows"), row.get("day_label","")] for row in rows]
     filename = "dns-reports-acessos-" + datetime.now(timezone.utc).strftime("%Y%m%d-%H%M") + "." + fmt
     if fmt == "csv":
         output = io.StringIO()
@@ -53,7 +53,8 @@ def export_accesses(rows, fmt):
                  Paragraph("Presença na coleta não confirma uso humano. Duração é a união dos intervalos "
                            "reportados dos fluxos, sem multiplicar conexões paralelas. "
                            "Encerramento é estimado por ausência; não há horário exato de fechamento. "
-                           "Bytes acumulados dos fluxos retidos, inclusive trechos anteriores ao filtro.", styles["Normal"])]
+                           "Resumos diários usam duração aproximada com resolução de um minuto. "
+                           "Bytes podem conter trechos anteriores ao filtro e são lançados no último dia do fluxo.", styles["Normal"])]
         data = [["Computador / IP", "Serviço/site", "Bytes", "Duração", "Estado", "Presença / ausência"]]
         for row in rows:
             ending = "Última presença: " + human_time(row["last_observed"])

@@ -139,16 +139,16 @@ redes explicitamente configuradas e destinos públicos.
   entre minutos/dias quando o intervalo atravessa uma fronteira.
 - Filtros consideram horas inteiras a partir do início selecionado e a última
   leitura até o fim selecionado. Uma primeira hora parcial não entra no total.
-- Conexões detalhadas: últimos 7 dias e até 100.000 fluxos, o que limitar primeiro.
+- Histórico: 90 dias em resumos diários. O detalhe recente é consolidado antes
+  de sua remoção; o alvo de 100.000 fluxos não apaga os resumos.
   Uma conexão observada repetidamente é atualizada, não inserida em duplicidade.
 - Os bytes acumulados de cada conexão não devem ser somados aos rankings, que
   utilizam diferenças entre leituras. O contador LAN e o ranking por aplicação
   são fontes independentes; somá-los duplica consumo.
 
-Os limites de conexões podem ser configurados pelo operador no config.json:
-ntopng_connection_retention_days (limitado à retenção geral) e
-ntopng_connection_limit (1.000 a 1.000.000). Valores maiores exigem mais disco.
-O painel mostra a política efetiva e o coletor aplica a limpeza.
+A retenção do histórico segue retention_days no config.json, com padrão 90.
+Os antigos limites separados de conexões não controlam mais o histórico.
+Consulte [HISTORY.md](HISTORY.md) para detalhes recentes, resumos e economia de disco.
 
 A agregação limita o crescimento, mas o tamanho final depende da quantidade de
 equipamentos/aplicações e do histórico DNS já existente. Monitore o disco do CT.

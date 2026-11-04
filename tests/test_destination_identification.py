@@ -154,7 +154,7 @@ def test_same_client_answer_ip_and_flow_start_ttl_produce_explicit_inference(con
     assert "Netflix" in c.get("/acessos?application=www.netflix.com").get_data(as_text=True)
     exported = c.get("/acessos/export/csv?kind=identified").get_data(as_text=True)
     rows = list(csv.reader(io.StringIO(exported.lstrip("\ufeff")), delimiter=";"))
-    assert rows[1][-1] == "www.netflix.com"
+    assert rows[1][rows[0].index("Domínios DNS candidatos (inferência)")] == "www.netflix.com"
     assert c.get("/acessos?kind=unidentified").get_data(as_text=True).count("Nenhum acesso observado") == 1
 
 
